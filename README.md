@@ -15,8 +15,8 @@ and gives you one page to review them and mark them as viewed.
 | --- | --- |
 | Gumtree | Daily. Reads the first page (30 newest/relevant) of the category in your area, plus each new listing. Gumtree's robots.txt blocks search pages and page 2+, so those aren't used. |
 | eBay | Coming: needs a free developer key. |
-| Facebook Marketplace | On request only, in your own browser (Claude in Chrome), then `python -m hunter add`. Not automated, to keep your account safe. |
-| Preloved | Not yet: its listings load from an address its robots.txt blocks. |
+| Facebook Marketplace | On request: say "check Facebook" in Claude Code (with Claude in Chrome) in this repo. Not automated, to keep your account safe. |
+| Preloved | On request: "check Preloved". Its robots.txt blocks automated search. |
 
 ## Your info stays local
 
