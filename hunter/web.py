@@ -8,6 +8,7 @@ import hashlib
 import html
 import json
 import threading
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode, urlparse
@@ -135,14 +136,48 @@ def render(profile_name: str | None, hunt_slug: str, tab: str, editing: str = ""
     else:
         cards = "".join(_card(profile.name, hunt.slug, item, tab) for item in shown)
         body = f'<div class="cards">{cards or "<p class=empty>Nothing here.</p>"}</div>'
+    checked = store_for(profile.name).last_checked(hunt.slug)
     browser_buttons = "".join(
         f'<button type="button" data-browser="{site}" data-hunt="{html.escape(hunt.slug)}">'
         f'Get Claude to check {label}</button>'
-        for site, label in BROWSER_SITES.items() if site in hunt.sites)
-    header = (f'<header><h1>{html.escape(hunt.name)}</h1><div class="buttons">{_mode_picker()}'
+        for site, label in BROWSER_SITES.items() if site in hunt.sites and not checked_today(checked.get(site)))
+    header = (f'<header><div><h1>{html.escape(hunt.name)}</h1>{_sources_line(hunt, checked)}</div>'
+              f'<div class="buttons">{_mode_picker()}'
               f'<button type="button" class="primary" data-search="{html.escape(hunt.slug)}">'
               f'Search this hunt</button>{browser_buttons}</div></header>')
     return _page(sidebar, f'{header}<nav class="tabs">{tab_links}</nav>{body}')
+
+
+SITE_NAMES = {"gumtree": "Gumtree", "ebay": "eBay", "facebook": "Facebook", "preloved": "Preloved"}
+
+
+def checked_today(when: str | None, today: str | None = None) -> bool:
+    return bool(when) and when[:10] == (today or datetime.now().date().isoformat())
+
+
+def _sources_line(hunt: Hunt, checked: dict[str, str]) -> str:
+    """Which sites the listings came from, and when each was last searched."""
+    if not checked:
+        return '<p class="muted">Not searched yet.</p>'
+    latest = max(checked.values())
+    parts = []
+    for site in hunt.sites:
+        name = SITE_NAMES.get(site, site)
+        when = checked.get(site)
+        if when:
+            parts.append(f"{name} ✓ {_short_time(when)}")
+        elif site == "ebay":
+            parts.append(f"{name}: not set up")
+        else:
+            parts.append(f"{name}: not checked")
+    return (f'<p class="muted">Last searched {_short_time(latest)} · '
+            f'{html.escape(" · ".join(parts))}</p>')
+
+
+def _short_time(when: str) -> str:
+    moment = datetime.fromisoformat(when)
+    day = "today" if checked_today(when) else moment.strftime("%a %-d %b")
+    return f"{day} {moment.strftime('%H:%M')}"
 
 
 def _interested(profile: Profile, hunt: str, items: list[dict]) -> str:
@@ -189,7 +224,8 @@ def _sidebar(profile: Profile | None, hunt: Hunt | None, profiles: list[str], ed
   {_mode_picker()}<button type="button" data-search="">Search all hunts</button>
   {"".join(f'<button type="button" data-browser="{site}" data-hunt="">Get Claude to check {label} (all hunts)</button>'
            for site, label in BROWSER_SITES.items()
-           if any(site in h.sites for h in profile.hunts))}
+           if any(site in h.sites and not checked_today(store_for(profile.name).last_checked(h.slug).get(site))
+                  for h in profile.hunts if h.active))}
   <p id="status" class="muted"></p>{_recent_runs(profile.name)}</section>""")
     return "".join(parts)
 

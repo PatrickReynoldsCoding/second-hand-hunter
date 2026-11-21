@@ -20,7 +20,7 @@ def run_profile(profile: Profile, store: Store, hunt_slug: str | None = None,
     hunts = [h for h in profile.hunts if h.active and (hunt_slug is None or h.slug == hunt_slug)]
     before = usage.limits()
     found = rechecked = 0
-    modes_used = set()
+    modes_used, sites_by_hunt = set(), {}
     for hunt in hunts:
         hunt_mode = mode or hunt.check_mode
         modes_used.add(hunt_mode)
@@ -28,9 +28,11 @@ def run_profile(profile: Profile, store: Store, hunt_slug: str | None = None,
             on_progress(f"Re-checking {hunt.name}…")
             rechecked += recheck_hunt(profile, hunt, store, geo, tally, hunt_mode)
         on_progress(f"Searching sites for {hunt.name}…")
-        found += run_hunt(profile, hunt, store, geo, tally, hunt_mode)
+        searched = set()
+        found += run_hunt(profile, hunt, store, geo, tally, hunt_mode, searched)
+        sites_by_hunt[hunt.slug] = sorted(searched)
     summary = {"hunts": [h.slug for h in hunts], "mode": "/".join(sorted(modes_used)),
-               "found": found, "rechecked": rechecked,
+               "sites_by_hunt": sites_by_hunt, "found": found, "rechecked": rechecked,
                "checks": tally.checks, "tokens": tally.tokens, "cost_usd": round(tally.cost_usd, 4),
                "limits_before": before, "limits_after": usage.limits()}
     store.save_run(summary)
@@ -63,9 +65,12 @@ def recheck_hunt(profile: Profile, hunt: Hunt, store: Store, geo: Geo, tally: Ta
 
 
 def run_hunt(profile: Profile, hunt: Hunt, store: Store, geo: Geo, tally: Tally | None = None,
-             mode: str | None = None) -> int:
+             mode: str | None = None, sites_used: set | None = None) -> int:
     new = 0
-    for listing in _search_sites(profile, hunt):
+    listings, searched = _search_sites(profile, hunt)
+    if sites_used is not None:
+        sites_used.update(searched)
+    for listing in listings:
         if store.known(hunt.slug, listing.key):
             continue
         if not check.matches_searches(hunt, f"{listing.title} {listing.description}"):
@@ -93,13 +98,16 @@ def add_listing(profile: Profile, hunt: Hunt, listing: Listing, store: Store, ge
     return verdict
 
 
-def _search_sites(profile: Profile, hunt: Hunt) -> list[Listing]:
-    found = []
+def _search_sites(profile: Profile, hunt: Hunt) -> tuple[list[Listing], list[str]]:
+    """Listings found, and the sites that were actually searched."""
+    found, searched = [], []
     if "gumtree" in hunt.sites and hunt.gumtree_category and profile.home.gumtree_area:
         try:
             found += gumtree.search(hunt.gumtree_category, profile.home.gumtree_area)
+            searched.append("gumtree")
         except Exception as error:
             log.warning("gumtree search failed: %s", error)
-    if "ebay" in hunt.sites:
+    if "ebay" in hunt.sites and ebay.ready():
         found += ebay.search(hunt, profile.home)
-    return found
+        searched.append("ebay")
+    return found, searched

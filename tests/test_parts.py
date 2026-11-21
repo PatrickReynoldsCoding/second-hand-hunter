@@ -133,3 +133,16 @@ def test_tally_adds_all_token_kinds():
     tally = Tally()
     tally.add({"usage": {"input_tokens": 2, "cache_read_input_tokens": 10, "output_tokens": 5}, "total_cost_usd": 0.1})
     assert (tally.checks, tally.tokens, tally.cost_usd) == (1, 17, 0.1)
+
+
+def test_last_checked_per_site(tmp_path):
+    from hunter.store import Store
+    from hunter.web import checked_today
+    store = Store(tmp_path / "x.db")
+    store.save_run({"hunts": ["sofa"], "sites_by_hunt": {"sofa": ["gumtree"]}})
+    store.save_run({"hunts": ["sofa"], "site": "preloved"})
+    store.save_run({"hunts": ["desk"], "site": "facebook"})
+    assert set(store.last_checked("sofa")) == {"gumtree", "preloved"}
+    assert checked_today("2026-11-21T07:30:00", today="2026-11-21")
+    assert not checked_today("2026-11-20T23:00:00", today="2026-11-21")
+    assert not checked_today(None)

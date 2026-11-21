@@ -113,6 +113,21 @@ class Store:
         rows = self.db.execute("select finished_at, summary from runs order by id desc limit ?", (limit,))
         return [{"finished_at": row["finished_at"], **json.loads(row["summary"])} for row in rows]
 
+    def last_checked(self, hunt: str) -> dict[str, str]:
+        """When each site was last searched for this hunt: {"gumtree": "2026-11-21T15:11:46"}."""
+        latest = {}
+        for row in self.db.execute("select finished_at, summary from runs order by id"):
+            summary = json.loads(row["summary"])
+            if hunt not in summary.get("hunts", []):
+                continue
+            if summary.get("site"):
+                sites = [summary["site"]]
+            else:
+                sites = summary.get("sites_by_hunt", {}).get(hunt, ["gumtree"])
+            for site in sites:
+                latest[site] = row["finished_at"]
+        return latest
+
     def set_status(self, hunt: str, key: str, status: str | None, stage: str | None = None) -> None:
         """status None puts it back in "To review"."""
         if status is not None and status not in STATUSES:
