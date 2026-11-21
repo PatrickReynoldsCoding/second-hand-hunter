@@ -14,6 +14,7 @@ class Home:
     lat: float | None = None
     lon: float | None = None
     gumtree_area: str | None = None
+    facebook_area: str | None = None
 
 
 @dataclass

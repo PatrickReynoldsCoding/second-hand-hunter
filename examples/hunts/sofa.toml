@@ -7,7 +7,7 @@ searches = ["corner sofa", "l shaped sofa", "chaise sofa"]
 
 max_price = 100        # pounds
 max_distance = 10      # miles from home
-sites = ["ebay", "gumtree", "preloved"]
+sites = ["gumtree", "ebay", "facebook", "preloved"]
 
 # Hard limits that can be checked from numbers in the listing.
 # Units: cm. Each one is optional.

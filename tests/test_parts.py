@@ -78,3 +78,13 @@ def test_town_name_picks_nearest_match(tmp_path):
     geo = Geo(tmp_path / "cache.json")
     geo.cache = {"outcodes/CR0": [51.37, -0.08], "places/croydon": [[52.1, -0.1], [51.37, -0.1]]}
     assert geo.miles(Home(postcode="CR0 1AA"), None, "Croydon, London") < 2
+
+
+def test_browser_links_use_only_outward_code():
+    from hunter.links import browser_search_urls
+    from hunter.spec import Home
+    hunt = Hunt(slug="sofa", name="x", searches=["corner sofa"], max_price=100, max_distance=10,
+                sites=["facebook", "preloved"])
+    urls = dict(browser_search_urls(Home(postcode="CR0 3QS", gumtree_area="croydon"), hunt))
+    assert "marketplace/croydon/search?query=corner+sofa&maxPrice=100&radius=16" in urls["facebook"]
+    assert "location=CR0&" in urls["preloved"] and "3QS" not in urls["preloved"]

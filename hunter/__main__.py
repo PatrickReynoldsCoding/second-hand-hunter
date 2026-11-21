@@ -3,12 +3,13 @@
   python -m hunter run   <profile>             search all sites now
   python -m hunter serve <profile>             open the review page
   python -m hunter add   <profile> <hunt> ...  add a listing by hand (e.g. Facebook)
+  python -m hunter links <profile>             search links for sites checked in a browser
 """
 
 import argparse
 import logging
 
-from hunter import run, web
+from hunter import links, run, web
 from hunter.geo import Geo
 from hunter.listing import Listing
 from hunter.spec import load_profile
@@ -18,7 +19,7 @@ from hunter.store import DATA_DIR, store_for
 def main() -> None:
     parser = argparse.ArgumentParser(prog="hunter")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("run", "serve"):
+    for name in ("run", "serve", "links"):
         commands.add_parser(name).add_argument("profile")
     add = commands.add_parser("add", help="add a listing found by hand")
     add.add_argument("profile")
@@ -42,6 +43,10 @@ def main() -> None:
         print("New listings: " + ", ".join(f"{hunt} {count}" for hunt, count in counts.items()))
     elif args.command == "serve":
         web.serve(profile, store)
+    elif args.command == "links":
+        for hunt in profile.hunts:
+            for site, url in links.browser_search_urls(profile.home, hunt):
+                print(f"{hunt.slug}\t{site}\t{url}")
     else:
         hunt = next(h for h in profile.hunts if h.slug == args.hunt)
         listing = Listing(
@@ -49,6 +54,9 @@ def main() -> None:
             title=args.title, price=args.price, description=args.description,
             image_urls=args.photo, postcode=args.postcode, place=args.place,
         )
+        if store.known(hunt.slug, listing.key):
+            print("already have: skipped")
+            return
         verdict = run.add_listing(profile, hunt, listing, store, Geo(DATA_DIR / "geo-cache.json"),
                                   fetch_details=False)
         print(f"{verdict.verdict}: {verdict.reason}")

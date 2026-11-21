@@ -1,15 +1,19 @@
 """The review page, served on this computer only (http://localhost:8765)."""
 
+import hashlib
 import html
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
+from hunter import net
 from hunter.spec import Profile
-from hunter.store import Store
+from hunter.store import DATA_DIR, Store
 
 PORT = 8765
 TABS = {"new": "To review", "viewed": "Viewed", "rejected": "Rejected"}
+PHOTO_CACHE = DATA_DIR / "photos"
+PHOTO_HOSTS = ("img.gumtree.com", "i.ebayimg.com", "scontent", "fbcdn.net", "preloved")
 BADGES = {"fits": "✅ Fits", "unknown": "❓ Ask seller", "no": "❌ No"}
 
 
@@ -53,8 +57,8 @@ def render(profile: Profile, store: Store, hunt_slug: str, tab: str) -> str:
 def _card(hunt: str, item: dict) -> str:
     esc = html.escape
     photo = item["image_urls"][0] if item["image_urls"] else ""
-    image = f'<img src="{esc(photo)}" alt="" loading="lazy">' if photo else '<div class="nophoto">No photo</div>'
-    price = f"£{item['price']:g}" if item["price"] is not None else "No price"
+    image = f'<img src="/photo?u={quote(photo, safe="")}" alt="" loading="lazy">' if photo else '<div class="nophoto">No photo</div>'
+    price = f"£{item['price']:g}" if item["price"] else "No price given"
     miles = f"{item['miles']} mi" if item["miles"] is not None else "distance unknown"
     place = esc(item["place"] or "")
     question = ""
@@ -119,6 +123,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         query = parse_qs(urlparse(self.path).query)
+        if urlparse(self.path).path == "/photo":
+            return self._photo(query.get("u", [""])[0])
         if urlparse(self.path).path != "/":
             return self._send(404, "text/plain", "Not found")
         body = render(self.profile, self.store, query.get("hunt", [""])[0], query.get("tab", ["new"])[0])
@@ -134,8 +140,25 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def _send(self, status: int, kind: str, body: str):
+    def _photo(self, url: str):
+        """Photos are fetched here, not by the browser, so a broken local DNS doesn't hide them."""
+        host = urlparse(url).hostname or ""
+        if urlparse(url).scheme != "https" or not any(part in host for part in PHOTO_HOSTS):
+            return self._send(400, "text/plain", "Not a listing photo")
+        cached = PHOTO_CACHE / hashlib.sha1(url.encode()).hexdigest()
+        if not cached.exists():
+            try:
+                data = net.fetch(url)
+            except net.FetchError:
+                return self._send(502, "text/plain", "Photo unavailable")
+            PHOTO_CACHE.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(data)
+        self._send(200, "image/jpeg", cached.read_bytes(), cache=True)
+
+    def _send(self, status: int, kind: str, body: str | bytes, cache: bool = False):
         self.send_response(status)
         self.send_header("Content-Type", kind)
+        if cache:
+            self.send_header("Cache-Control", "max-age=604800")
         self.end_headers()
-        self.wfile.write(body.encode())
+        self.wfile.write(body if isinstance(body, bytes) else body.encode())
