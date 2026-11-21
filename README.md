@@ -1,23 +1,44 @@
 # second-hand-hunter
 
-Searches second-hand sites every day for items that match a spec you write,
+Searches second-hand sites every morning for items that match a spec you write,
 and gives you one page to review them and mark them as viewed.
 
 - **A hunt** is one spec file: search words, max price, max distance, size limits,
   and must-haves in plain English. Any item works (sofa, bike, desk...).
-- **Sites:** eBay, Gumtree, Preloved daily. Facebook Marketplace only on request,
-  through your own browser.
-- Each listing is marked fits / doesn't fit / unknown, with a reason.
+- **Each listing** gets ✅ fits, ❓ ask seller (with a ready-made question) or ❌ no,
+  with a one-line reason. Claude (headless Claude Code) reads the text and photos.
+- **Distance** comes from the listing's postcode, or its town name if hidden.
+
+## Sites
+
+| Site | How |
+| --- | --- |
+| Gumtree | Daily. Reads the first page (30 newest/relevant) of the category in your area, plus each new listing. Gumtree's robots.txt blocks search pages and page 2+, so those aren't used. |
+| eBay | Coming: needs a free developer key. |
+| Facebook Marketplace | On request only, in your own browser (Claude in Chrome), then `python -m hunter add`. Not automated, to keep your account safe. |
+| Preloved | Not yet: its listings load from an address its robots.txt blocks. |
 
 ## Your info stays local
 
-`profiles/` (your postcode and hunts) and `data/` (listings found) are gitignored.
+`profiles/` (your postcode and hunts) and `data/` (listings, viewed marks) are
+gitignored. Home distance uses only the outward code (e.g. "CR0") with
+postcodes.io, unless you put your own lat/lon in the profile.
 
 ## Set up
 
 ```sh
 mkdir -p profiles/<you> && cp -r examples/* profiles/<you>/
 # edit profiles/<you>/profile.toml and profiles/<you>/hunts/*.toml
+python3 -m hunter run <you>      # search now
+python3 -m hunter serve <you>    # review page at http://localhost:8765
+systemd/install.sh <you>         # daily 07:30 search + always-on review page
 ```
 
-Status: early. Spec format done; site search, review page and daily run to come.
+Needs Python 3.11+, curl, and Claude Code (`claude`) logged in.
+
+## Add a listing by hand
+
+```sh
+python3 -m hunter add <you> sofa --url <link> --title "Grey corner sofa" \
+  --price 60 --place "Shirley, London" --description "..." --photo <photo-url>
+```

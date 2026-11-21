@@ -1,0 +1,58 @@
+"""Commands:
+
+  python -m hunter run   <profile>             search all sites now
+  python -m hunter serve <profile>             open the review page
+  python -m hunter add   <profile> <hunt> ...  add a listing by hand (e.g. Facebook)
+"""
+
+import argparse
+import logging
+
+from hunter import run, web
+from hunter.geo import Geo
+from hunter.listing import Listing
+from hunter.spec import load_profile
+from hunter.store import DATA_DIR, store_for
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="hunter")
+    commands = parser.add_subparsers(dest="command", required=True)
+    for name in ("run", "serve"):
+        commands.add_parser(name).add_argument("profile")
+    add = commands.add_parser("add", help="add a listing found by hand")
+    add.add_argument("profile")
+    add.add_argument("hunt")
+    add.add_argument("--site", default="facebook")
+    add.add_argument("--url", required=True)
+    add.add_argument("--title", required=True)
+    add.add_argument("--price", type=float)
+    add.add_argument("--postcode")
+    add.add_argument("--place")
+    add.add_argument("--description", default="")
+    add.add_argument("--photo", action="append", default=[], help="photo URL, can repeat")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    profile = load_profile(args.profile)
+    store = store_for(args.profile)
+
+    if args.command == "run":
+        counts = run.run_profile(profile, store)
+        print("New listings: " + ", ".join(f"{hunt} {count}" for hunt, count in counts.items()))
+    elif args.command == "serve":
+        web.serve(profile, store)
+    else:
+        hunt = next(h for h in profile.hunts if h.slug == args.hunt)
+        listing = Listing(
+            site=args.site, site_id=args.url.rstrip("/").rsplit("/", 1)[-1], url=args.url,
+            title=args.title, price=args.price, description=args.description,
+            image_urls=args.photo, postcode=args.postcode, place=args.place,
+        )
+        verdict = run.add_listing(profile, hunt, listing, store, Geo(DATA_DIR / "geo-cache.json"),
+                                  fetch_details=False)
+        print(f"{verdict.verdict}: {verdict.reason}")
+
+
+if __name__ == "__main__":
+    main()

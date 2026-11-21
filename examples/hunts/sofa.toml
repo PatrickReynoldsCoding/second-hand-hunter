@@ -25,3 +25,7 @@ rule = "Back of the sofa is no more than 2 m wide."
 
 [[must]]
 rule = "Long side is no more than 2 m long."
+
+# Gumtree category path (from the address bar when browsing a category).
+[gumtree]
+category = "for-sale/home-garden/dining-living-room-furniture/sofas/sofas-couches"

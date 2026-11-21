@@ -2,8 +2,12 @@
 # profiles/ is gitignored, so your location stays on your computer.
 
 [home]
-# Used for searching and for working out distance.
+# Used to work out distance. Only the first half (e.g. "SW1A") is ever sent
+# to a lookup service, unless you give lat/lon below.
 postcode = "SW1A 1AA"
-# Optional. If left out, the centre of the postcode district is used.
+# Optional, more exact. Find yours by right-clicking your house in Google Maps.
 # lat = 51.501
 # lon = -0.142
+
+# Gumtree area name, as it appears in Gumtree addresses (e.g. "croydon").
+gumtree_area = "westminster"

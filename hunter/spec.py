@@ -13,6 +13,7 @@ class Home:
     postcode: str
     lat: float | None = None
     lon: float | None = None
+    gumtree_area: str | None = None
 
 
 @dataclass
@@ -26,6 +27,7 @@ class Hunt:
     size: dict[str, float] = field(default_factory=dict)
     musts: list[str] = field(default_factory=list)
     active: bool = True
+    gumtree_category: str | None = None
 
 
 @dataclass
@@ -69,4 +71,5 @@ def load_hunt(path: Path) -> Hunt:
         size=raw.get("size", {}),
         musts=[must["rule"] for must in raw.get("must", [])],
         active=raw.get("active", True),
+        gumtree_category=raw.get("gumtree", {}).get("category"),
     )
