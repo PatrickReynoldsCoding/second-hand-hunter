@@ -34,12 +34,22 @@ create table if not exists listings (
 """
 
 
+RUNS_SCHEMA = """
+create table if not exists runs (
+    id integer primary key,
+    finished_at text not null,
+    summary text not null
+)
+"""
+
+
 class Store:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute(SCHEMA)
+        self.db.execute(RUNS_SCHEMA)
         columns = {row["name"] for row in self.db.execute("pragma table_info(listings)")}
         if "is_trade" not in columns:
             self.db.execute("alter table listings add column is_trade integer not null default 0")
@@ -79,6 +89,14 @@ class Store:
                     place=row["place"], age=row["age"], is_trade=bool(row["is_trade"]))
             for row in rows
         ]
+
+    def save_run(self, summary: dict) -> None:
+        self.db.execute("insert into runs (finished_at, summary) values (?, ?)", (_now(), json.dumps(summary)))
+        self.db.commit()
+
+    def recent_runs(self, limit: int = 5) -> list[dict]:
+        rows = self.db.execute("select finished_at, summary from runs order by id desc limit ?", (limit,))
+        return [{"finished_at": row["finished_at"], **json.loads(row["summary"])} for row in rows]
 
     def set_viewed(self, hunt: str, key: str, viewed: bool) -> None:
         self.db.execute(

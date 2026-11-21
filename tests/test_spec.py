@@ -34,7 +34,7 @@ def test_profile_and_hunt_round_trip(tmp_path):
     create_profile("sam", Home(postcode="CR0 1AA", gumtree_area="croydon"), tmp_path)
     hunt = Hunt(slug="desk", name='Standing "desk"', searches=["standing desk"], max_price=80.5,
                 max_distance=5, sites=["gumtree"], size={"width_max": 140},
-                musts=["Electric, not crank"], gumtree_category="for-sale/x")
+                musts=["Electric, not crank"], avoid=["glass top"], gumtree_category="for-sale/x")
     save_hunt("sam", hunt, tmp_path)
     loaded = load_profile("sam", tmp_path)
     assert list_profiles(tmp_path) == ["sam"]

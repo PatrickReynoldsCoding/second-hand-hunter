@@ -42,8 +42,10 @@ def main() -> None:
     store = store_for(args.profile)
 
     if args.command == "run":
-        counts = run.run_profile(profile, store)
-        print("New listings: " + ", ".join(f"{hunt} {count}" for hunt, count in counts.items()))
+        summary = run.run_profile(profile, store)
+        print(f"New listings: {summary['found']}. Claude checks: {summary['checks']}, "
+              f"tokens: {summary['tokens']:,}. Limits before/after: "
+              f"{summary['limits_before']} / {summary['limits_after']}")
     elif args.command == "links":
         for hunt in profile.hunts:
             for site, url in links.browser_search_urls(profile.home, hunt):

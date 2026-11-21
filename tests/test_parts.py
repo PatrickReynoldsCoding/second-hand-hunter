@@ -98,3 +98,18 @@ def test_store_keeps_trade_flag_and_first_seen(tmp_path):
     store.save("sofa", listing(is_trade=True), 1.0, "no", "Trade again")
     [again] = store.unviewed("sofa")
     assert again.is_trade and store.listings("sofa")[0]["found_at"] == first
+
+
+def test_usage_line():
+    from hunter.web import usage_line
+    run = {"tokens": 120500, "checks": 4, "limits_before": {"five_hour": 58, "seven_day": 8},
+           "limits_after": {"five_hour": 61, "seven_day": 8}}
+    assert usage_line(run) == "120,500 tokens (4 Claude checks), 5-hour +3% (now 61%), week +0% (now 8%)"
+    assert usage_line({**run, "limits_after": None}).endswith("plan % unknown")
+
+
+def test_tally_adds_all_token_kinds():
+    from hunter.usage import Tally
+    tally = Tally()
+    tally.add({"usage": {"input_tokens": 2, "cache_read_input_tokens": 10, "output_tokens": 5}, "total_cost_usd": 0.1})
+    assert (tally.checks, tally.tokens, tally.cost_usd) == (1, 17, 0.1)

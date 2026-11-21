@@ -52,7 +52,9 @@ document.addEventListener('click', async e => {
       if (!confirm('Delete this hunt? Its listings stay in the database.')) return;
       location.href = (await post('/api/hunt/delete', {profile: profile(), slug: b.dataset.delete})).go;
     }
-    else if (b.id === 'search-all') { toast((await post('/api/search', {profile: profile()})).message); watch(); }
+    else if (b.dataset.search !== undefined) {
+      toast((await post('/api/search', {profile: profile(), hunt: b.dataset.search})).message); watch();
+    }
   } catch (error) { toast(error.message); }
 });
 

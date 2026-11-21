@@ -49,33 +49,41 @@ class SearchJob:
         self.running = False
         self.message = ""
 
-    def start(self, profile_name: str, hunt_slug: str | None) -> bool:
+    def start(self, profile_name: str, hunt_slug: str | None, recheck: bool = False) -> bool:
         with self.lock:
             if self.running:
                 return False
             self.running, self.message = True, "Searching…"
-        threading.Thread(target=self._run, args=(profile_name, hunt_slug), daemon=True).start()
+        threading.Thread(target=self._run, args=(profile_name, hunt_slug, recheck), daemon=True).start()
         return True
 
     def status(self) -> dict:
         return {"running": self.running, "message": self.message}
 
-    def _run(self, profile_name: str, hunt_slug: str | None) -> None:
+    def _run(self, profile_name: str, hunt_slug: str | None, recheck: bool) -> None:
         try:
             profile = spec.load_profile(profile_name)
-            store, geo = store_for(profile_name), Geo(DATA_DIR / "geo-cache.json")
-            hunts = [h for h in profile.hunts if h.active and (hunt_slug is None or h.slug == hunt_slug)]
-            rechecked = found = 0
-            for hunt in hunts:
-                self.message = f"Re-checking {hunt.name}…"
-                rechecked += run.recheck_hunt(profile, hunt, store, geo)
-                self.message = f"Searching sites for {hunt.name}…"
-                found += run.run_hunt(profile, hunt, store, geo)
-            self.message = f"Done: {found} new, {rechecked} re-checked."
+            summary = run.run_profile(profile, store_for(profile_name), hunt_slug, recheck,
+                                      on_progress=self._progress)
+            self.message = (f"Done: {summary['found']} new, {summary['rechecked']} re-checked. "
+                            f"{usage_line(summary)}")
         except Exception as error:
             self.message = f"Search failed: {error}"
         finally:
             self.running = False
+
+    def _progress(self, message: str) -> None:
+        self.message = message
+
+
+def usage_line(summary: dict) -> str:
+    tokens = f"{summary['tokens']:,} tokens ({summary['checks']} Claude checks)"
+    before, after = summary.get("limits_before"), summary.get("limits_after")
+    if not before or not after:
+        return tokens + ", plan % unknown"
+    windows = {"five_hour": "5-hour", "seven_day": "week"}
+    parts = [f"{label} +{after[key] - before[key]:g}% (now {after[key]:g}%)" for key, label in windows.items()]
+    return f"{tokens}, {', '.join(parts)}"
 
 
 JOB = SearchJob()
@@ -101,7 +109,9 @@ def render(profile_name: str | None, hunt_slug: str, tab: str, editing: str = ""
     shown = sorted((item for item in listings if in_tab(item, tab)),
                    key=lambda item: (item["verdict"] != "fits", item["found_at"]))
     cards = "".join(_card(profile.name, hunt.slug, item) for item in shown)
-    return _page(sidebar, f'<h1>{html.escape(hunt.name)}</h1><nav class="tabs">{tab_links}</nav>'
+    header = (f'<header><h1>{html.escape(hunt.name)}</h1><button type="button" class="primary" '
+              f'data-search="{html.escape(hunt.slug)}">Search this hunt</button></header>')
+    return _page(sidebar, f'{header}<nav class="tabs">{tab_links}</nav>'
                           f'<div class="cards">{cards or "<p class=empty>Nothing here.</p>"}</div>')
 
 
@@ -132,9 +142,21 @@ def _sidebar(profile: Profile | None, hunt: Hunt | None, profiles: list[str], ed
         if hunt or new_hunt:
             parts.append(_hunt_form(profile.name, None if new_hunt else hunt))
         parts.append(_home_form(profile))
-        parts.append("""<section><button type="button" id="search-all">Search all hunts now</button>
-  <p id="status" class="muted"></p></section>""")
+        parts.append(f"""<section><h2>Searches</h2>
+  <button type="button" data-search="">Search all hunts</button>
+  <p id="status" class="muted"></p>{_recent_runs(profile.name)}</section>""")
     return "".join(parts)
+
+
+def _recent_runs(profile: str) -> str:
+    runs = store_for(profile).recent_runs()
+    if not runs:
+        return ""
+    rows = "".join(
+        f'<li><b>{run_info["finished_at"][5:16].replace("T", " ")}</b> · {html.escape(", ".join(run_info["hunts"]))} · '
+        f'{run_info["found"]} new<br><span class="muted">{html.escape(usage_line(run_info))}</span></li>'
+        for run_info in runs)
+    return f'<ul class="runs">{rows}</ul>'
 
 
 def _home_form(profile: Profile) -> str:
@@ -171,9 +193,10 @@ def _hunt_form(profile: str, hunt: Hunt | None) -> str:
   <fieldset><legend>Sites</legend>{sites}</fieldset>
   {_textarea("size", "Size limits in cm (one per line, e.g. width_max = 200)", size)}
   {_textarea("musts", "Must-haves (one per line, plain English)", "\n".join(h.musts))}
+  {_textarea("avoid", "Don't want (one per line, e.g. leather)", "\n".join(h.avoid))}
   {_input("gumtree_category", "Gumtree category path", h.gumtree_category)}
   <div class="buttons"><button name="then" value="">Save</button>
-  <button name="then" value="search" class="primary">Save and search again</button>{delete}</div>
+  <button name="then" value="search" class="primary">Save and re-check</button>{delete}</div>
 </form></details>"""
 
 
@@ -248,7 +271,8 @@ def save_hunt(data: dict) -> Hunt:
     hunt = Hunt(slug=data.get("slug", "").strip().lower(), name=data.get("name", "").strip(),
                 searches=_lines(data.get("searches", "")), max_price=_number(data.get("max_price")) or 0,
                 max_distance=_number(data.get("max_distance")) or 0, sites=data.get("sites", []),
-                size=size, musts=_lines(data.get("musts", "")), active=bool(data.get("active")),
+                size=size, musts=_lines(data.get("musts", "")), avoid=_lines(data.get("avoid", "")),
+                active=bool(data.get("active")),
                 gumtree_category=data.get("gumtree_category", "").strip() or None)
     spec.save_hunt(_profile_name(data), hunt)
     return hunt
@@ -316,7 +340,7 @@ class _Handler(BaseHTTPRequestHandler):
             hunt = save_hunt(data)
             go = _link(data["profile"], hunt.slug)
             if data.get("then") == "search":
-                started = JOB.start(data["profile"], hunt.slug)
+                started = JOB.start(data["profile"], hunt.slug, recheck=True)
                 return {"message": "Saved. Searching…" if started else "Saved. A search is already running.",
                         "go": go}
             return {"message": "Saved.", "go": go}

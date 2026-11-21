@@ -39,8 +39,11 @@ Needs Python 3.11+, curl, and Claude Code (`claude`) logged in.
 ## The review page
 
 The sidebar picks the profile and hunt, edits the home details and each hunt's spec,
-adds new profiles and hunts, and has "Save and search again" (re-checks unviewed
-listings against the edited spec, then searches for new ones).
+adds new profiles and hunts, and has "Save and re-check" (re-checks unviewed
+listings against the edited spec, then searches for new ones). Each hunt has its
+own "Search this hunt" button. Recent searches show Claude tokens used and the
+change in your 5-hour and weekly plan usage (read the same way as `/usage`;
+undocumented, so it can show "unknown").
 
 ## Add a listing by hand
 

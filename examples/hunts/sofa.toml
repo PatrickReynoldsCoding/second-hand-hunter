@@ -9,6 +9,9 @@ max_price = 100        # pounds
 max_distance = 10      # miles from home
 sites = ["gumtree", "ebay", "facebook", "preloved"]
 
+# Things you don't want, in plain English. Any match means "no".
+avoid = ["leather"]
+
 # Hard limits that can be checked from numbers in the listing.
 # Units: cm. Each one is optional.
 [size]

@@ -28,6 +28,7 @@ class Hunt:
     sites: list[str]
     size: dict[str, float] = field(default_factory=dict)
     musts: list[str] = field(default_factory=list)
+    avoid: list[str] = field(default_factory=list)
     active: bool = True
     gumtree_category: str | None = None
 
@@ -72,6 +73,7 @@ def load_hunt(path: Path) -> Hunt:
         sites=sites,
         size=raw.get("size", {}),
         musts=[must["rule"] for must in raw.get("must", [])],
+        avoid=raw.get("avoid", []),
         active=raw.get("active", True),
         gumtree_category=raw.get("gumtree", {}).get("category"),
     )
@@ -112,7 +114,8 @@ def save_hunt(profile: str, hunt: Hunt, profiles_dir: Path = PROFILES_DIR) -> No
     if not hunt.name.strip() or not hunt.searches:
         raise SpecError("A hunt needs a name and at least one search.")
     top = {"name": hunt.name, "active": hunt.active, "searches": hunt.searches,
-           "max_price": hunt.max_price, "max_distance": hunt.max_distance, "sites": hunt.sites}
+           "max_price": hunt.max_price, "max_distance": hunt.max_distance, "sites": hunt.sites,
+           "avoid": hunt.avoid}
     text = _toml_lines(top)
     if hunt.size:
         text += "\n[size]\n" + _toml_lines(hunt.size)

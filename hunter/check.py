@@ -15,6 +15,7 @@ from pathlib import Path
 from hunter import net
 from hunter.listing import Listing
 from hunter.spec import Hunt
+from hunter.usage import Tally
 
 FITS, NO, UNKNOWN = "fits", "no", "unknown"
 CLAUDE_TIMEOUT_SECONDS = 300
@@ -42,7 +43,7 @@ def quick_reject(hunt: Hunt, listing: Listing, miles: float | None) -> Verdict |
     return None
 
 
-def claude_check(hunt: Hunt, listing: Listing, miles: float | None) -> Verdict:
+def claude_check(hunt: Hunt, listing: Listing, miles: float | None, tally: Tally | None = None) -> Verdict:
     with tempfile.TemporaryDirectory() as folder:
         photos = _download_photos(listing, Path(folder))
         prompt = _prompt(hunt, listing, miles, photos)
@@ -50,9 +51,15 @@ def claude_check(hunt: Hunt, listing: Listing, miles: float | None) -> Verdict:
             result = subprocess.run(
                 ["claude", "-p", prompt, "--output-format", "json", "--allowedTools", "Read"],
                 capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_SECONDS, cwd=folder,
+                stdin=subprocess.DEVNULL,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             return Verdict(UNKNOWN, f"Not checked: {error}")
+    if tally is not None:
+        try:
+            tally.add(json.loads(result.stdout))
+        except ValueError:
+            pass
     return parse_claude_answer(result.stdout)
 
 
@@ -95,6 +102,7 @@ def _download_photos(listing: Listing, folder: Path) -> list[Path]:
 def _prompt(hunt: Hunt, listing: Listing, miles: float | None, photos: list[Path]) -> str:
     limits = "\n".join(f"- {name}: {value} cm" for name, value in hunt.size.items()) or "- none"
     musts = "\n".join(f"- {rule}" for rule in hunt.musts) or "- none"
+    avoid = "\n".join(f"- {thing}" for thing in hunt.avoid) or "- none"
     photo_list = "\n".join(f"- {path}" for path in photos) or "- no photos"
     return f"""You check second-hand listings against a buyer's spec. Look at the photos with the Read tool.
 
@@ -103,6 +111,8 @@ Size limits:
 {limits}
 Must-haves:
 {musts}
+Don't want (any of these means "no"):
+{avoid}
 
 Listing: {listing.title}
 Price: {listing.price}  Distance: {miles if miles is not None else "unknown"} miles
@@ -114,7 +124,7 @@ Photos:
 
 Decide:
 - "fits" only if every must-have and size limit is clearly met (from text, or clearly visible in photos).
-- "no" if any must-have or limit is clearly broken, or it isn't the item wanted.
+- "no" if any must-have or limit is clearly broken, it has anything from "Don't want", or it isn't the item wanted.
 - "unknown" if something can't be told. Then write a short, friendly question to the seller asking only for what's missing.
 Photos are often mirrored or taken from odd angles: say in the reason what you based any orientation call on.
 

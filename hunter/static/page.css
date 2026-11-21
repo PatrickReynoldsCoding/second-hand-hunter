@@ -41,3 +41,6 @@ button.view{margin-top:auto}
 .empty{color:var(--muted)}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px}
 @media (max-width:760px){body{grid-template-columns:1fr}aside{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}}
+main header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+main header h1{margin:0}
+ul.runs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px}
