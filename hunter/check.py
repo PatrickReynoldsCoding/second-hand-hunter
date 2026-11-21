@@ -37,6 +37,7 @@ MODES = {
     "thorough": Mode(model="opus", photos=5, effort="high"),
 }
 DEFAULT_MODE = "basic"
+NO_AI = "rules"  # text rules only, no Claude
 
 
 def claude_command(prompt: str, mode: Mode) -> list[str]:

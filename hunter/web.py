@@ -99,7 +99,8 @@ class SearchJob:
 
 def usage_line(summary: dict) -> str:
     site = f"{BROWSER_SITES.get(summary['site'], summary['site'])} " if summary.get("site") else ""
-    mode = f"{site}{summary['mode']}: " if summary.get("mode") else ""
+    label = "/".join(spec.MODE_LABELS.get(part, part) for part in summary.get("mode", "").split("/") if part)
+    mode = f"{site}{label}: " if label else ""
     tokens = f"{mode}{summary['tokens']:,} tokens ({summary['checks']} Claude checks)"
     before, after = summary.get("limits_before"), summary.get("limits_after")
     if not before or not after:
@@ -231,9 +232,10 @@ def _sidebar(profile: Profile | None, hunt: Hunt | None, profiles: list[str], ed
 
 
 def _mode_picker() -> str:
-    return ('<label class="row">Check <select class="mode-pick" title="Basic: fast and cheap. '
-            'Thorough: strongest model, more photos, several times the tokens.">'
-            '<option value="basic">Basic</option><option value="thorough">Thorough</option></select></label>')
+    options = "".join(f'<option value="{mode}">{label}</option>' for mode, label in spec.MODE_LABELS.items())
+    return ('<label class="row">Check <select class="mode-pick" title="No AI: text rules only, no tokens. '
+            'Basic AI: fast and cheap. Thorough AI: strongest model, more photos.">'
+            f'{options}</select></label>')
 
 
 def _recent_runs(profile: str) -> str:
@@ -286,9 +288,7 @@ def _hunt_form(profile: str, hunt: Hunt | None) -> str:
   {_textarea("musts", "Must-haves (one per line, plain English)", "\n".join(h.musts))}
   {_textarea("avoid", "Don't want (one per line, e.g. leather)", "\n".join(h.avoid))}
   {_input("gumtree_category", "Gumtree category path", h.gumtree_category)}
-  <label>Daily search check<select name="check_mode">{"".join(
-      f'<option value="{m}" {"selected" if m == h.check_mode else ""}>{m.title()}</option>'
-      for m in spec.CHECK_MODES)}</select></label>
+
   <div class="buttons"><button name="then" value="">Save</button>
   <button name="then" value="search" class="primary">Save and re-check</button>{delete}</div>
 </form></details>"""
@@ -382,7 +382,7 @@ def save_hunt(data: dict) -> Hunt:
                 searches=_lines(data.get("searches", "")), max_price=_number(data.get("max_price")) or 0,
                 max_distance=_number(data.get("max_distance")) or 0, sites=data.get("sites", []),
                 size=size, musts=_lines(data.get("musts", "")), avoid=_lines(data.get("avoid", "")),
-                active=bool(data.get("active")), check_mode=data.get("check_mode", "basic"),
+                active=bool(data.get("active")),
                 gumtree_category=data.get("gumtree_category", "").strip() or None)
     spec.save_hunt(_profile_name(data), hunt)
     return hunt

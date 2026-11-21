@@ -7,7 +7,9 @@ from pathlib import Path
 
 PROFILES_DIR = Path(__file__).resolve().parent.parent / "profiles"
 KNOWN_SITES = {"ebay", "gumtree", "preloved", "facebook"}
-CHECK_MODES = ("basic", "thorough")
+CHECK_MODES = ("rules", "basic", "thorough")
+DEFAULT_CHECK_MODE = "rules"
+MODE_LABELS = {"rules": "No AI", "basic": "Basic AI", "thorough": "Thorough AI"}
 DEFAULT_STAGES = ["To contact", "Contacted seller", "Viewing arranged", "Bought", "Gone / no reply"]
 
 
@@ -32,7 +34,6 @@ class Hunt:
     musts: list[str] = field(default_factory=list)
     avoid: list[str] = field(default_factory=list)
     active: bool = True
-    check_mode: str = "basic"
     gumtree_category: str | None = None
 
 
@@ -79,7 +80,6 @@ def load_hunt(path: Path) -> Hunt:
         size=raw.get("size", {}),
         musts=[must["rule"] for must in raw.get("must", [])],
         avoid=raw.get("avoid", []),
-        check_mode=raw.get("check_mode", "basic"),
         active=raw.get("active", True),
         gumtree_category=raw.get("gumtree", {}).get("category"),
     )
@@ -122,13 +122,11 @@ def save_hunt(profile: str, hunt: Hunt, profiles_dir: Path = PROFILES_DIR) -> No
     unknown = set(hunt.sites) - KNOWN_SITES
     if unknown:
         raise SpecError(f"Unknown sites: {', '.join(sorted(unknown))}")
-    if hunt.check_mode not in CHECK_MODES:
-        raise SpecError(f"Check mode must be one of: {', '.join(CHECK_MODES)}")
     if not hunt.name.strip() or not hunt.searches:
         raise SpecError("A hunt needs a name and at least one search.")
     top = {"name": hunt.name, "active": hunt.active, "searches": hunt.searches,
            "max_price": hunt.max_price, "max_distance": hunt.max_distance, "sites": hunt.sites,
-           "avoid": hunt.avoid, "check_mode": hunt.check_mode}
+           "avoid": hunt.avoid}
     text = _toml_lines(top)
     if hunt.size:
         text += "\n[size]\n" + _toml_lines(hunt.size)

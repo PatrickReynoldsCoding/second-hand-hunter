@@ -1,12 +1,12 @@
 const profile = () => document.getElementById('profile-pick')?.value;
-const mode = () => document.querySelector('.mode-pick')?.value || 'basic';
+const mode = () => document.querySelector('.mode-pick')?.value || 'rules';
 
 // Remember the chosen check mode and keep every picker on the page in step.
 function setMode(value) {
   document.querySelectorAll('.mode-pick').forEach(pick => { pick.value = value; });
   try { localStorage.setItem('checkMode', value); } catch {}
 }
-try { setMode(localStorage.getItem('checkMode') || 'basic'); } catch { setMode('basic'); }
+try { setMode(localStorage.getItem('checkMode') || 'rules'); } catch { setMode('rules'); }
 document.addEventListener('change', async e => {
   const pick = e.target;
   if (pick.classList.contains('mode-pick')) setMode(pick.value);

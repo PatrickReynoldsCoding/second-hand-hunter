@@ -2,10 +2,10 @@
 
 import logging
 
-from hunter import browser_check, check, ebay, gumtree, usage
+from hunter import browser_check, check, ebay, gumtree, rules, usage
 from hunter.geo import Geo
 from hunter.listing import Listing
-from hunter.spec import Hunt, Profile
+from hunter.spec import DEFAULT_CHECK_MODE, Hunt, Profile
 from hunter.store import DATA_DIR, Store
 from hunter.usage import Tally
 
@@ -22,7 +22,7 @@ def run_profile(profile: Profile, store: Store, hunt_slug: str | None = None,
     found = rechecked = 0
     modes_used, sites_by_hunt = set(), {}
     for hunt in hunts:
-        hunt_mode = mode or hunt.check_mode
+        hunt_mode = mode or DEFAULT_CHECK_MODE
         modes_used.add(hunt_mode)
         if recheck:
             on_progress(f"Re-checking {hunt.name}…")
@@ -91,11 +91,22 @@ def add_listing(profile: Profile, hunt: Hunt, listing: Listing, store: Store, ge
         except Exception as error:  # one bad page shouldn't stop the run
             log.warning("details failed for %s: %s", listing.url, error)
     miles = geo.miles(profile.home, listing.postcode, listing.place)
-    verdict = (check.quick_reject(hunt, listing, miles)
-               or check.claude_check(hunt, listing, miles, tally, mode or hunt.check_mode))
+    verdict = check.quick_reject(hunt, listing, miles) or _text_or_ai_check(hunt, listing, miles, tally,
+                                                                             mode or DEFAULT_CHECK_MODE)
     store.save(hunt.slug, listing, miles, verdict.verdict, verdict.reason, verdict.seller_question)
     log.info("%s %s: %s", verdict.verdict, listing.title, verdict.reason)
     return verdict
+
+
+def _text_or_ai_check(hunt: Hunt, listing: Listing, miles: float | None, tally: Tally | None,
+                      mode: str) -> check.Verdict:
+    """Text rules first (free). Then AI, unless the mode is "No AI"."""
+    reason = rules.text_reject(hunt, listing)
+    if reason:
+        return check.Verdict(check.NO, reason)
+    if mode == check.NO_AI:
+        return check.Verdict(check.UNKNOWN, *rules.no_ai_verdict(hunt, listing))
+    return check.claude_check(hunt, listing, miles, tally, mode)
 
 
 def _search_sites(profile: Profile, hunt: Hunt) -> tuple[list[Listing], list[str]]:
