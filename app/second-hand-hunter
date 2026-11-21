@@ -22,5 +22,5 @@ google-chrome --app="$url" --user-data-dir="$window_profile" --class=second-hand
   --no-first-run --no-default-browser-check >/dev/null 2>&1 || true
 
 if [ -n "$started_server" ]; then
-  pkill -f "python3 -m hunter serve" || true
+  pkill -f "^python3 -m hunter serve" || true
 fi

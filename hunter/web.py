@@ -320,13 +320,31 @@ ACTIONS = {
 }
 
 
+GUMTREE_SIZES = {"large": "86", "small": "20"}
+
+
+def photo_src(url: str, size: str = "large") -> str:
+    """Local address for a listing photo. Gumtree serves smaller copies for thumbnails."""
+    if "img.gumtree.com" in url:
+        url = url.rsplit("/", 1)[0] + "/" + GUMTREE_SIZES[size]
+    return f"/photo?u={quote(url, safe='')}"
+
+
 def _card(profile: str, hunt: str, item: dict, tab: str, stages: list[str] | None = None) -> str:
     esc = html.escape
-    photo = item["image_urls"][0] if item["image_urls"] else ""
-    image = (f'<img src="/photo?u={quote(photo, safe="")}" alt="" loading="lazy">' if photo
+    photos = item["image_urls"]
+    count = f'<span class="count">📷 {len(photos)}</span>' if len(photos) > 1 else ""
+    image = (f'<img src="{photo_src(photos[0], "small")}" alt="" loading="lazy">{count}' if photos
              else '<div class="nophoto">No photo</div>')
     price = f"£{item['price']:g}" if item["price"] else "No price given"
     miles = f"{item['miles']} mi" if item["miles"] is not None else "distance unknown"
+    site_name = SITE_NAMES.get(item["site"], item["site"])
+    detail = json.dumps({
+        "title": item["title"], "url": item["url"], "site": site_name,
+        "facts": f"{price} · {miles} · {item['place'] or ''}", "reason": item["reason"] or "",
+        "description": item["description"] or "",
+        "photos": [photo_src(url) for url in photos], "thumbs": [photo_src(url, "small") for url in photos],
+    })
     question = ""
     if item["seller_question"]:
         question = (f'<p class="ask">{esc(item["seller_question"])}</p>'
@@ -341,15 +359,17 @@ def _card(profile: str, hunt: str, item: dict, tab: str, stages: list[str] | Non
     buttons = "".join(
         f'<button type="button" class="status {"primary" if status == "interested" else ""}" {ids} '
         f'data-status="{status}">{label}</button>' for status, label in ACTIONS.get(tab, ACTIONS["new"]))
-    return f"""<article class="{esc(item['verdict'])}">
-  <a href="{esc(item['url'])}" target="_blank" rel="noopener">{image}</a>
+    open_site = (f'<a class="button" href="{esc(item["url"])}" target="_blank" rel="noopener">'
+                 f'Open on {esc(site_name)} ↗</a>')
+    return f"""<article class="{esc(item['verdict'])}" data-detail="{esc(detail)}">
+  <div class="photo" title="Click for larger photos">{image}</div>
   <div class="body">
-    <span class="badge">{BADGES.get(item['verdict'], item['verdict'])}</span> <span class="muted">{esc(item['site'])}</span>
-    <h3><a href="{esc(item['url'])}" target="_blank" rel="noopener">{esc(item['title'])}</a></h3>
+    <span class="badge">{BADGES.get(item['verdict'], item['verdict'])}</span> <span class="muted">{esc(site_name)}</span>
+    <h3 class="title">{esc(item['title'])}</h3>
     <p class="muted"><b>{price}</b> · {miles} · {esc(item['place'] or '')}</p>
     <p class="reason">{esc(item['reason'] or '')}</p>
     {question}{stage_pick}
-    <div class="buttons actions">{buttons}</div>
+    <div class="buttons actions">{buttons}{open_site}</div>
   </div>
 </article>"""
 
@@ -358,7 +378,22 @@ def _page(sidebar: str, main: str) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Second-hand hunter</title>
 <link rel="stylesheet" href="/static/page.css"></head>
-<body><aside>{sidebar}</aside><main>{main}</main><script src="/static/page.js"></script></body></html>"""
+<body><aside>{sidebar}</aside><main>{main}</main>
+<dialog id="viewer">
+  <header><h2 id="viewer-title"></h2><button type="button" data-close aria-label="Close">✕</button></header>
+  <div class="stage" id="viewer-stage">
+    <button type="button" class="nav prev" data-step="-1" aria-label="Previous photo">‹</button>
+    <img id="viewer-photo" alt="">
+    <button type="button" class="nav next" data-step="1" aria-label="Next photo">›</button>
+    <span id="viewer-count" class="count"></span>
+  </div>
+  <div class="thumbs" id="viewer-thumbs"></div>
+  <div class="buttons"><button type="button" id="viewer-fullscreen">Fullscreen</button>
+    <a class="button primary" id="viewer-site" target="_blank" rel="noopener"></a></div>
+  <p id="viewer-facts" class="muted"></p><p id="viewer-reason" class="reason"></p>
+  <p id="viewer-description" class="description"></p>
+</dialog>
+<script src="/static/page.js"></script></body></html>"""
 
 
 # --- Saving from the forms ---

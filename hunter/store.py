@@ -128,6 +128,11 @@ class Store:
                 latest[site] = row["finished_at"]
         return latest
 
+    def set_photos(self, hunt: str, key: str, image_urls: list[str]) -> None:
+        self.db.execute("update listings set image_urls=? where hunt=? and key=?",
+                        (json.dumps(image_urls), hunt, key))
+        self.db.commit()
+
     def set_status(self, hunt: str, key: str, status: str | None, stage: str | None = None) -> None:
         """status None puts it back in "To review"."""
         if status is not None and status not in STATUSES:

@@ -98,3 +98,51 @@ async function watch() {
 const pending = sessionStorage.getItem('pendingToast');
 if (pending) { toast(pending); sessionStorage.removeItem('pendingToast'); }
 watch();
+
+// --- Photo viewer: click a card to see larger photos ---
+const viewer = document.getElementById('viewer');
+let detail = null, index = 0;
+
+function show(i) {
+  if (!detail || !detail.photos.length) return;
+  index = (i + detail.photos.length) % detail.photos.length;
+  document.getElementById('viewer-photo').src = detail.photos[index];
+  document.getElementById('viewer-count').textContent = `${index + 1} / ${detail.photos.length}`;
+  document.querySelectorAll('#viewer-thumbs img').forEach((img, n) => img.classList.toggle('on', n === index));
+}
+
+function openViewer(card) {
+  detail = JSON.parse(card.dataset.detail);
+  document.getElementById('viewer-title').textContent = detail.title;
+  document.getElementById('viewer-facts').textContent = detail.facts;
+  document.getElementById('viewer-reason').textContent = detail.reason;
+  document.getElementById('viewer-description').textContent = detail.description;
+  const site = document.getElementById('viewer-site');
+  site.href = detail.url; site.textContent = `Open on ${detail.site} ↗`;
+  const thumbs = document.getElementById('viewer-thumbs');
+  thumbs.replaceChildren(...detail.thumbs.map((src, n) => {
+    const img = document.createElement('img'); img.src = src; img.alt = ''; img.dataset.index = n; return img;
+  }));
+  viewer.classList.toggle('single', detail.photos.length < 2);
+  viewer.classList.toggle('nophotos', !detail.photos.length);
+  viewer.showModal();
+  show(0);
+}
+
+document.addEventListener('click', e => {
+  const card = e.target.closest('article[data-detail]');
+  if (card && !e.target.closest('button, a, select, label, details')) openViewer(card);
+  if (!viewer.open) return;
+  if (e.target === viewer || e.target.closest('[data-close]')) viewer.close();
+  const step = e.target.closest('[data-step]'); if (step) show(index + Number(step.dataset.step));
+  const thumb = e.target.closest('#viewer-thumbs img'); if (thumb) show(Number(thumb.dataset.index));
+  if (e.target.id === 'viewer-fullscreen') {
+    document.fullscreenElement ? document.exitFullscreen() : document.getElementById('viewer-stage').requestFullscreen();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (!viewer.open) return;
+  if (e.key === 'ArrowLeft') show(index - 1);
+  if (e.key === 'ArrowRight') show(index + 1);
+});

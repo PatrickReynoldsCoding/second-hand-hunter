@@ -146,3 +146,12 @@ def test_last_checked_per_site(tmp_path):
     assert checked_today("2026-11-21T07:30:00", today="2026-11-21")
     assert not checked_today("2026-11-20T23:00:00", today="2026-11-21")
     assert not checked_today(None)
+
+
+def test_photo_src_uses_small_gumtree_copies_for_thumbnails():
+    from urllib.parse import unquote
+    from hunter.web import photo_src
+    url = "https://img.gumtree.com/abc/def/86"
+    assert unquote(photo_src(url, "small")).endswith("/def/20")
+    assert unquote(photo_src(url)).endswith("/def/86")
+    assert unquote(photo_src("https://scontent.fbcdn.net/x.jpg", "small")).endswith("x.jpg")

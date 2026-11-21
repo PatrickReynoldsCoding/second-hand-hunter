@@ -12,7 +12,7 @@ from hunter import net
 from hunter.listing import Listing
 
 BASE = "https://www.gumtree.com"
-MAX_PHOTOS = 5
+MAX_PHOTOS = 40  # all of them, in practice; AI checks use fewer
 
 
 def category_url(category: str, area: str) -> str:
