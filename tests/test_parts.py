@@ -88,3 +88,13 @@ def test_browser_links_use_only_outward_code():
     urls = dict(browser_search_urls(Home(postcode="CR0 3QS", gumtree_area="croydon"), hunt))
     assert "marketplace/croydon/search?query=corner+sofa&maxPrice=100&radius=16" in urls["facebook"]
     assert "location=CR0&" in urls["preloved"] and "3QS" not in urls["preloved"]
+
+
+def test_store_keeps_trade_flag_and_first_seen(tmp_path):
+    from hunter.store import Store
+    store = Store(tmp_path / "x.db")
+    store.save("sofa", listing(is_trade=True), 1.0, "no", "Trade")
+    first = store.listings("sofa")[0]["found_at"]
+    store.save("sofa", listing(is_trade=True), 1.0, "no", "Trade again")
+    [again] = store.unviewed("sofa")
+    assert again.is_trade and store.listings("sofa")[0]["found_at"] == first

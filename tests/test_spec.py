@@ -27,3 +27,22 @@ def test_unknown_site_is_rejected(tmp_path):
 def test_missing_profile_explains_fix(tmp_path):
     with pytest.raises(SpecError, match="Copy examples"):
         load_profile("nobody", profiles_dir=tmp_path)
+
+
+def test_profile_and_hunt_round_trip(tmp_path):
+    from hunter.spec import Home, Hunt, create_profile, list_profiles, save_hunt
+    create_profile("sam", Home(postcode="CR0 1AA", gumtree_area="croydon"), tmp_path)
+    hunt = Hunt(slug="desk", name='Standing "desk"', searches=["standing desk"], max_price=80.5,
+                max_distance=5, sites=["gumtree"], size={"width_max": 140},
+                musts=["Electric, not crank"], gumtree_category="for-sale/x")
+    save_hunt("sam", hunt, tmp_path)
+    loaded = load_profile("sam", tmp_path)
+    assert list_profiles(tmp_path) == ["sam"]
+    assert loaded.home.gumtree_area == "croydon"
+    assert loaded.hunts[0] == hunt
+
+
+def test_bad_names_are_refused(tmp_path):
+    from hunter.spec import Home, create_profile
+    with pytest.raises(SpecError):
+        create_profile("../evil", Home(postcode="X"), tmp_path)

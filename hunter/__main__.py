@@ -19,8 +19,9 @@ from hunter.store import DATA_DIR, store_for
 def main() -> None:
     parser = argparse.ArgumentParser(prog="hunter")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("run", "serve", "links"):
+    for name in ("run", "links"):
         commands.add_parser(name).add_argument("profile")
+    commands.add_parser("serve").add_argument("profile", nargs="?")
     add = commands.add_parser("add", help="add a listing found by hand")
     add.add_argument("profile")
     add.add_argument("hunt")
@@ -35,14 +36,14 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+    if args.command == "serve":
+        return web.serve(args.profile)
     profile = load_profile(args.profile)
     store = store_for(args.profile)
 
     if args.command == "run":
         counts = run.run_profile(profile, store)
         print("New listings: " + ", ".join(f"{hunt} {count}" for hunt, count in counts.items()))
-    elif args.command == "serve":
-        web.serve(profile, store)
     elif args.command == "links":
         for hunt in profile.hunts:
             for site, url in links.browser_search_urls(profile.home, hunt):

@@ -30,11 +30,17 @@ postcodes.io, unless you put your own lat/lon in the profile.
 mkdir -p profiles/<you> && cp -r examples/* profiles/<you>/
 # edit profiles/<you>/profile.toml and profiles/<you>/hunts/*.toml
 python3 -m hunter run <you>      # search now
-python3 -m hunter serve <you>    # review page at http://localhost:8765
+python3 -m hunter serve          # review page at http://localhost:8765
 systemd/install.sh <you>         # daily 07:30 search + always-on review page
 ```
 
 Needs Python 3.11+, curl, and Claude Code (`claude`) logged in.
+
+## The review page
+
+The sidebar picks the profile and hunt, edits the home details and each hunt's spec,
+adds new profiles and hunts, and has "Save and search again" (re-checks unviewed
+listings against the edited spec, then searches for new ones).
 
 ## Add a listing by hand
 

@@ -20,6 +20,15 @@ def run_profile(profile: Profile, store: Store) -> dict[str, int]:
     return counts
 
 
+def recheck_hunt(profile: Profile, hunt: Hunt, store: Store, geo: Geo) -> int:
+    """Check unviewed listings again, after the spec was edited."""
+    listings = [item for item in store.unviewed(hunt.slug)
+                if check.matches_searches(hunt, f"{item.title} {item.description}")]
+    for listing in listings:
+        add_listing(profile, hunt, listing, store, geo, fetch_details=False)
+    return len(listings)
+
+
 def run_hunt(profile: Profile, hunt: Hunt, store: Store, geo: Geo) -> int:
     new = 0
     for listing in _search_sites(profile, hunt):
