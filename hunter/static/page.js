@@ -1,4 +1,13 @@
 const profile = () => document.getElementById('profile-pick')?.value;
+const mode = () => document.querySelector('.mode-pick')?.value || 'basic';
+
+// Remember the chosen check mode and keep every picker on the page in step.
+function setMode(value) {
+  document.querySelectorAll('.mode-pick').forEach(pick => { pick.value = value; });
+  try { localStorage.setItem('checkMode', value); } catch {}
+}
+try { setMode(localStorage.getItem('checkMode') || 'basic'); } catch { setMode('basic'); }
+document.addEventListener('change', e => { if (e.target.classList.contains('mode-pick')) setMode(e.target.value); });
 
 async function post(path, body) {
   const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -25,6 +34,7 @@ function formData(form, submitter) {
     else data[field.name] = field.value;
   }
   if (submitter?.name) data[submitter.name] = submitter.value;
+  data.mode = mode();
   return data;
 }
 
@@ -53,7 +63,7 @@ document.addEventListener('click', async e => {
       location.href = (await post('/api/hunt/delete', {profile: profile(), slug: b.dataset.delete})).go;
     }
     else if (b.dataset.search !== undefined) {
-      toast((await post('/api/search', {profile: profile(), hunt: b.dataset.search})).message); watch();
+      toast((await post('/api/search', {profile: profile(), hunt: b.dataset.search, mode: mode()})).message); watch();
     }
   } catch (error) { toast(error.message); }
 });

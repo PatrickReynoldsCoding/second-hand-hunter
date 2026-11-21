@@ -49,22 +49,23 @@ class SearchJob:
         self.running = False
         self.message = ""
 
-    def start(self, profile_name: str, hunt_slug: str | None, recheck: bool = False) -> bool:
+    def start(self, profile_name: str, hunt_slug: str | None, recheck: bool = False,
+              mode: str | None = None) -> bool:
         with self.lock:
             if self.running:
                 return False
             self.running, self.message = True, "Searching…"
-        threading.Thread(target=self._run, args=(profile_name, hunt_slug, recheck), daemon=True).start()
+        threading.Thread(target=self._run, args=(profile_name, hunt_slug, recheck, mode), daemon=True).start()
         return True
 
     def status(self) -> dict:
         return {"running": self.running, "message": self.message}
 
-    def _run(self, profile_name: str, hunt_slug: str | None, recheck: bool) -> None:
+    def _run(self, profile_name: str, hunt_slug: str | None, recheck: bool, mode: str | None) -> None:
         try:
             profile = spec.load_profile(profile_name)
             summary = run.run_profile(profile, store_for(profile_name), hunt_slug, recheck,
-                                      on_progress=self._progress)
+                                      on_progress=self._progress, mode=mode)
             self.message = (f"Done: {summary['found']} new, {summary['rechecked']} re-checked. "
                             f"{usage_line(summary)}")
         except Exception as error:
@@ -77,7 +78,8 @@ class SearchJob:
 
 
 def usage_line(summary: dict) -> str:
-    tokens = f"{summary['tokens']:,} tokens ({summary['checks']} Claude checks)"
+    mode = f"{summary['mode']}: " if summary.get("mode") else ""
+    tokens = f"{mode}{summary['tokens']:,} tokens ({summary['checks']} Claude checks)"
     before, after = summary.get("limits_before"), summary.get("limits_after")
     if not before or not after:
         return tokens + ", plan % unknown"
@@ -109,8 +111,9 @@ def render(profile_name: str | None, hunt_slug: str, tab: str, editing: str = ""
     shown = sorted((item for item in listings if in_tab(item, tab)),
                    key=lambda item: (item["verdict"] != "fits", item["found_at"]))
     cards = "".join(_card(profile.name, hunt.slug, item) for item in shown)
-    header = (f'<header><h1>{html.escape(hunt.name)}</h1><button type="button" class="primary" '
-              f'data-search="{html.escape(hunt.slug)}">Search this hunt</button></header>')
+    header = (f'<header><h1>{html.escape(hunt.name)}</h1><div class="buttons">{_mode_picker()}'
+              f'<button type="button" class="primary" data-search="{html.escape(hunt.slug)}">'
+              f'Search this hunt</button></div></header>')
     return _page(sidebar, f'{header}<nav class="tabs">{tab_links}</nav>'
                           f'<div class="cards">{cards or "<p class=empty>Nothing here.</p>"}</div>')
 
@@ -143,9 +146,15 @@ def _sidebar(profile: Profile | None, hunt: Hunt | None, profiles: list[str], ed
             parts.append(_hunt_form(profile.name, None if new_hunt else hunt))
         parts.append(_home_form(profile))
         parts.append(f"""<section><h2>Searches</h2>
-  <button type="button" data-search="">Search all hunts</button>
+  {_mode_picker()}<button type="button" data-search="">Search all hunts</button>
   <p id="status" class="muted"></p>{_recent_runs(profile.name)}</section>""")
     return "".join(parts)
+
+
+def _mode_picker() -> str:
+    return ('<label class="row">Check <select class="mode-pick" title="Basic: fast and cheap. '
+            'Thorough: strongest model, more photos, several times the tokens.">'
+            '<option value="basic">Basic</option><option value="thorough">Thorough</option></select></label>')
 
 
 def _recent_runs(profile: str) -> str:
@@ -195,6 +204,9 @@ def _hunt_form(profile: str, hunt: Hunt | None) -> str:
   {_textarea("musts", "Must-haves (one per line, plain English)", "\n".join(h.musts))}
   {_textarea("avoid", "Don't want (one per line, e.g. leather)", "\n".join(h.avoid))}
   {_input("gumtree_category", "Gumtree category path", h.gumtree_category)}
+  <label>Daily search check<select name="check_mode">{"".join(
+      f'<option value="{m}" {"selected" if m == h.check_mode else ""}>{m.title()}</option>'
+      for m in spec.CHECK_MODES)}</select></label>
   <div class="buttons"><button name="then" value="">Save</button>
   <button name="then" value="search" class="primary">Save and re-check</button>{delete}</div>
 </form></details>"""
@@ -272,7 +284,7 @@ def save_hunt(data: dict) -> Hunt:
                 searches=_lines(data.get("searches", "")), max_price=_number(data.get("max_price")) or 0,
                 max_distance=_number(data.get("max_distance")) or 0, sites=data.get("sites", []),
                 size=size, musts=_lines(data.get("musts", "")), avoid=_lines(data.get("avoid", "")),
-                active=bool(data.get("active")),
+                active=bool(data.get("active")), check_mode=data.get("check_mode", "basic"),
                 gumtree_category=data.get("gumtree_category", "").strip() or None)
     spec.save_hunt(_profile_name(data), hunt)
     return hunt
@@ -283,6 +295,11 @@ def create_profile(data: dict) -> str:
     spec.create_profile(name, Home(postcode=data.get("postcode", "").strip(),
                                    gumtree_area=data.get("gumtree_area", "").strip() or None))
     return name
+
+
+def _mode(data: dict) -> str | None:
+    mode = data.get("mode")
+    return mode if mode in spec.CHECK_MODES else None
 
 
 def _profile_name(data: dict) -> str:
@@ -340,7 +357,7 @@ class _Handler(BaseHTTPRequestHandler):
             hunt = save_hunt(data)
             go = _link(data["profile"], hunt.slug)
             if data.get("then") == "search":
-                started = JOB.start(data["profile"], hunt.slug, recheck=True)
+                started = JOB.start(data["profile"], hunt.slug, recheck=True, mode=_mode(data))
                 return {"message": "Saved. Searching…" if started else "Saved. A search is already running.",
                         "go": go}
             return {"message": "Saved.", "go": go}
@@ -351,7 +368,7 @@ class _Handler(BaseHTTPRequestHandler):
             name = create_profile(data)
             return {"go": _link(name, edit="new")}
         if path == "/api/search":
-            started = JOB.start(_profile_name(data), data.get("hunt") or None)
+            started = JOB.start(_profile_name(data), data.get("hunt") or None, mode=_mode(data))
             return {"message": "Searching…" if started else "A search is already running."}
         raise SpecError("Unknown action.")
 

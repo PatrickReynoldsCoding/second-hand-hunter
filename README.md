@@ -41,7 +41,9 @@ Needs Python 3.11+, curl, and Claude Code (`claude`) logged in.
 The sidebar picks the profile and hunt, edits the home details and each hunt's spec,
 adds new profiles and hunts, and has "Save and re-check" (re-checks unviewed
 listings against the edited spec, then searches for new ones). Each hunt has its
-own "Search this hunt" button. Recent searches show Claude tokens used and the
+own "Search this hunt" button, with a check mode: **Basic** (Haiku, 3 photos) or
+**Thorough** (Opus, 5 photos, more effort). Both start Claude with nothing extra
+loaded, about 8k tokens per listing. The daily search uses each hunt's own mode. Recent searches show Claude tokens used and the
 change in your 5-hour and weekly plan usage (read the same way as `/usage`;
 undocumented, so it can show "unknown").
 

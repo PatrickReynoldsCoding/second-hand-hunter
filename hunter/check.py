@@ -19,6 +19,30 @@ from hunter.usage import Tally
 
 FITS, NO, UNKNOWN = "fits", "no", "unknown"
 CLAUDE_TIMEOUT_SECONDS = 300
+SYSTEM_PROMPT = "You check second-hand listings against a buyer's spec. Reply with JSON only."
+
+
+@dataclass(frozen=True)
+class Mode:
+    model: str
+    photos: int
+    effort: str
+
+
+# Both modes start Claude Code with nothing extra loaded (no MCP servers, skills,
+# memory or settings): that start-up text was most of the tokens.
+MODES = {
+    "basic": Mode(model="haiku", photos=3, effort="low"),
+    "thorough": Mode(model="opus", photos=5, effort="high"),
+}
+DEFAULT_MODE = "basic"
+
+
+def claude_command(prompt: str, mode: Mode) -> list[str]:
+    return ["claude", "-p", prompt, "--output-format", "json", "--model", mode.model,
+            "--effort", mode.effort, "--tools", "Read", "--allowedTools", "Read",
+            "--strict-mcp-config", "--setting-sources", "project", "--disable-slash-commands",
+            "--no-session-persistence", "--system-prompt", SYSTEM_PROMPT]
 
 
 @dataclass
@@ -43,13 +67,15 @@ def quick_reject(hunt: Hunt, listing: Listing, miles: float | None) -> Verdict |
     return None
 
 
-def claude_check(hunt: Hunt, listing: Listing, miles: float | None, tally: Tally | None = None) -> Verdict:
+def claude_check(hunt: Hunt, listing: Listing, miles: float | None, tally: Tally | None = None,
+                 mode: str = DEFAULT_MODE) -> Verdict:
+    settings = MODES.get(mode, MODES[DEFAULT_MODE])
     with tempfile.TemporaryDirectory() as folder:
-        photos = _download_photos(listing, Path(folder))
+        photos = _download_photos(listing, Path(folder), settings.photos)
         prompt = _prompt(hunt, listing, miles, photos)
         try:
             result = subprocess.run(
-                ["claude", "-p", prompt, "--output-format", "json", "--allowedTools", "Read"],
+                claude_command(prompt, settings),
                 capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_SECONDS, cwd=folder,
                 stdin=subprocess.DEVNULL,
             )
@@ -86,9 +112,9 @@ def _same_word(want: str, word: str) -> bool:
     return word.startswith(want) or want.startswith(word)
 
 
-def _download_photos(listing: Listing, folder: Path) -> list[Path]:
+def _download_photos(listing: Listing, folder: Path, limit: int) -> list[Path]:
     photos = []
-    for number, url in enumerate(listing.image_urls, start=1):
+    for number, url in enumerate(listing.image_urls[:limit], start=1):
         try:
             data = net.fetch(url)
         except net.FetchError:

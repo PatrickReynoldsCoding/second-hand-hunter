@@ -106,6 +106,13 @@ def test_usage_line():
            "limits_after": {"five_hour": 61, "seven_day": 8}}
     assert usage_line(run) == "120,500 tokens (4 Claude checks), 5-hour +3% (now 61%), week +0% (now 8%)"
     assert usage_line({**run, "limits_after": None}).endswith("plan % unknown")
+    assert usage_line({**run, "mode": "basic"}).startswith("basic: 120,500 tokens")
+
+
+def test_modes_load_nothing_extra():
+    command = check.claude_command("hi", check.MODES["basic"])
+    assert "--strict-mcp-config" in command and command[command.index("--model") + 1] == "haiku"
+    assert check.MODES["thorough"].photos > check.MODES["basic"].photos
 
 
 def test_tally_adds_all_token_kinds():
