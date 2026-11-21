@@ -46,3 +46,12 @@ def test_bad_names_are_refused(tmp_path):
     from hunter.spec import Home, create_profile
     with pytest.raises(SpecError):
         create_profile("../evil", Home(postcode="X"), tmp_path)
+
+
+def test_stages_saved_and_kept(tmp_path):
+    from hunter.spec import DEFAULT_STAGES, Home, create_profile, save_home
+    create_profile("sam", Home(postcode="CR0 1AA"), tmp_path)
+    assert load_profile("sam", tmp_path).stages == DEFAULT_STAGES
+    save_home("sam", Home(postcode="CR0 1AA"), tmp_path, stages=["Asked", "Seen"])
+    save_home("sam", Home(postcode="CR0 2BB"), tmp_path)
+    assert load_profile("sam", tmp_path).stages == ["Asked", "Seen"]

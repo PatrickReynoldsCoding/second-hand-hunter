@@ -15,8 +15,8 @@ and gives you one page to review them and mark them as viewed.
 | --- | --- |
 | Gumtree | Daily. Reads the first page (30 newest/relevant) of the category in your area, plus each new listing. Gumtree's robots.txt blocks search pages and page 2+, so those aren't used. |
 | eBay | Coming: needs a free developer key. |
-| Facebook Marketplace | On request: say "check Facebook" in Claude Code (with Claude in Chrome) in this repo. Not automated, to keep your account safe. |
-| Preloved | On request: "check Preloved". Its robots.txt blocks automated search. |
+| Facebook Marketplace | On request: the "Get Claude to check Facebook" button starts a background Claude in your Chrome (Claude in Chrome). Never on a timer, to keep your account safe. |
+| Preloved | On request, the same way. Its robots.txt blocks automated search. |
 
 ## Your info stays local
 
@@ -46,6 +46,10 @@ own "Search this hunt" button, with a check mode: **Basic** (Haiku, 3 photos) or
 loaded, about 8k tokens per listing. The daily search uses each hunt's own mode. Recent searches show Claude tokens used and the
 change in your 5-hour and weekly plan usage (read the same way as `/usage`;
 undocumented, so it can show "unknown").
+
+Each listing can be marked **Interested**, **Viewed** or **Reject**. The
+Interested tab groups listings by stage ("Contacted seller", "Viewing arranged"…);
+edit the stages in the sidebar under Profile.
 
 ## Add a listing by hand
 

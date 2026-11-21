@@ -8,6 +8,7 @@ from pathlib import Path
 PROFILES_DIR = Path(__file__).resolve().parent.parent / "profiles"
 KNOWN_SITES = {"ebay", "gumtree", "preloved", "facebook"}
 CHECK_MODES = ("basic", "thorough")
+DEFAULT_STAGES = ["To contact", "Contacted seller", "Viewing arranged", "Bought", "Gone / no reply"]
 
 
 @dataclass
@@ -40,6 +41,7 @@ class Profile:
     name: str
     home: Home
     hunts: list[Hunt]
+    stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
 
 
 class SpecError(ValueError):
@@ -54,7 +56,8 @@ def load_profile(name: str, profiles_dir: Path = PROFILES_DIR) -> Profile:
     raw = tomllib.loads(profile_file.read_text())
     home = Home(**raw["home"])
     hunt_files = sorted((folder / "hunts").glob("*.toml"))
-    return Profile(name=name, home=home, hunts=[load_hunt(path) for path in hunt_files])
+    return Profile(name=name, home=home, hunts=[load_hunt(path) for path in hunt_files],
+                   stages=raw.get("stages") or list(DEFAULT_STAGES))
 
 
 def load_hunt(path: Path) -> Hunt:
@@ -102,11 +105,16 @@ def create_profile(name: str, home: Home, profiles_dir: Path = PROFILES_DIR) -> 
     save_home(name, home, profiles_dir)
 
 
-def save_home(profile: str, home: Home, profiles_dir: Path = PROFILES_DIR) -> None:
+def save_home(profile: str, home: Home, profiles_dir: Path = PROFILES_DIR,
+              stages: list[str] | None = None) -> None:
     if not home.postcode.strip():
         raise SpecError("Postcode is needed.")
+    path = profiles_dir / profile / "profile.toml"
+    if stages is None and path.exists():
+        stages = tomllib.loads(path.read_text()).get("stages")
+    top = _toml_lines({"stages": stages}) + "\n" if stages else ""
     values = {key: value for key, value in vars(home).items() if value not in (None, "")}
-    (profiles_dir / profile / "profile.toml").write_text("[home]\n" + _toml_lines(values))
+    path.write_text(top + "[home]\n" + _toml_lines(values))
 
 
 def save_hunt(profile: str, hunt: Hunt, profiles_dir: Path = PROFILES_DIR) -> None:

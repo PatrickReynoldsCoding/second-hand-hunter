@@ -1,4 +1,4 @@
-"""Listings found, their verdicts and viewed marks, in data/<profile>.db."""
+"""Listings found, their verdicts and your status for each, in data/<profile>.db."""
 
 import json
 import sqlite3
@@ -29,6 +29,8 @@ create table if not exists listings (
     found_at text not null,
     viewed_at text,
     is_trade integer not null default 0,
+    status text,
+    stage text,
     primary key (key, hunt)
 )
 """
@@ -43,6 +45,10 @@ create table if not exists runs (
 """
 
 
+STATUSES = ("interested", "viewed", "rejected")
+NEW_COLUMNS = {"is_trade": "integer not null default 0", "status": "text", "stage": "text"}
+
+
 class Store:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,8 +57,11 @@ class Store:
         self.db.execute(SCHEMA)
         self.db.execute(RUNS_SCHEMA)
         columns = {row["name"] for row in self.db.execute("pragma table_info(listings)")}
-        if "is_trade" not in columns:
-            self.db.execute("alter table listings add column is_trade integer not null default 0")
+        for name, kind in NEW_COLUMNS.items():
+            if name not in columns:
+                self.db.execute(f"alter table listings add column {name} {kind}")
+        self.db.execute("update listings set status='viewed' where status is null and viewed_at is not null")
+        self.db.commit()
 
     def known(self, hunt: str, key: str) -> bool:
         row = self.db.execute("select 1 from listings where hunt=? and key=?", (hunt, key)).fetchone()
@@ -60,15 +69,20 @@ class Store:
 
     def save(self, hunt: str, listing: Listing, miles: float | None, verdict: str,
              reason: str, seller_question: str = "") -> None:
+        """Add or update a listing. Keeps when it was first found and your status."""
         self.db.execute(
-            "insert or replace into listings (key, hunt, site, url, title, price, description,"
-            " image_urls, place, postcode, miles, age, verdict, reason, seller_question, found_at,"
-            " is_trade) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,coalesce((select found_at from"
-            " listings where key=? and hunt=?), ?),?)",
+            "insert into listings (key, hunt, site, url, title, price, description, image_urls,"
+            " place, postcode, miles, age, verdict, reason, seller_question, found_at, is_trade)"
+            " values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            " on conflict (key, hunt) do update set site=excluded.site, url=excluded.url,"
+            " title=excluded.title, price=excluded.price, description=excluded.description,"
+            " image_urls=excluded.image_urls, place=excluded.place, postcode=excluded.postcode,"
+            " miles=excluded.miles, age=excluded.age, verdict=excluded.verdict,"
+            " reason=excluded.reason, seller_question=excluded.seller_question,"
+            " is_trade=excluded.is_trade",
             (listing.key, hunt, listing.site, listing.url, listing.title, listing.price,
              listing.description, json.dumps(listing.image_urls), listing.place, listing.postcode,
-             miles, listing.age, verdict, reason, seller_question, listing.key, hunt, _now(),
-             int(listing.is_trade)),
+             miles, listing.age, verdict, reason, seller_question, _now(), int(listing.is_trade)),
         )
         self.db.commit()
 
@@ -79,8 +93,9 @@ class Store:
         return [{**row, "image_urls": json.loads(row["image_urls"] or "[]")} for row in rows]
 
     def unviewed(self, hunt: str) -> list[Listing]:
+        """Listings you haven't acted on yet (no status)."""
         rows = self.db.execute(
-            "select * from listings where hunt=? and viewed_at is null", (hunt,)
+            "select * from listings where hunt=? and status is null", (hunt,)
         ).fetchall()
         return [
             Listing(site=row["site"], site_id=row["key"].split(":", 1)[1], url=row["url"],
@@ -98,13 +113,15 @@ class Store:
         rows = self.db.execute("select finished_at, summary from runs order by id desc limit ?", (limit,))
         return [{"finished_at": row["finished_at"], **json.loads(row["summary"])} for row in rows]
 
-    def set_viewed(self, hunt: str, key: str, viewed: bool) -> None:
+    def set_status(self, hunt: str, key: str, status: str | None, stage: str | None = None) -> None:
+        """status None puts it back in "To review"."""
+        if status is not None and status not in STATUSES:
+            raise ValueError(f"Unknown status {status}")
         self.db.execute(
-            "update listings set viewed_at=? where hunt=? and key=?",
-            (_now() if viewed else None, hunt, key),
+            "update listings set status=?, stage=?, viewed_at=? where hunt=? and key=?",
+            (status, stage if status == "interested" else None, _now() if status else None, hunt, key),
         )
         self.db.commit()
-
 
 def store_for(profile: str) -> Store:
     return Store(DATA_DIR / f"{profile}.db")

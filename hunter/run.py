@@ -2,7 +2,7 @@
 
 import logging
 
-from hunter import check, ebay, gumtree, usage
+from hunter import browser_check, check, ebay, gumtree, usage
 from hunter.geo import Geo
 from hunter.listing import Listing
 from hunter.spec import Hunt, Profile
@@ -33,6 +33,21 @@ def run_profile(profile: Profile, store: Store, hunt_slug: str | None = None,
                "found": found, "rechecked": rechecked,
                "checks": tally.checks, "tokens": tally.tokens, "cost_usd": round(tally.cost_usd, 4),
                "limits_before": before, "limits_after": usage.limits()}
+    store.save_run(summary)
+    return summary
+
+
+def run_browser_site(profile: Profile, store: Store, site: str, hunt_slug: str | None,
+                     mode: str) -> dict:
+    """Have a background Claude check a site in Chrome, recording tokens and plan usage."""
+    tally, before = Tally(), usage.limits()
+    keys_before = {(h.slug, item["key"]) for h in profile.hunts for item in store.listings(h.slug)}
+    result = browser_check.run(profile.name, site, hunt_slug, mode, tally)
+    keys_after = {(h.slug, item["key"]) for h in profile.hunts for item in store.listings(h.slug)}
+    summary = {"hunts": [hunt_slug] if hunt_slug else [h.slug for h in profile.hunts if h.active],
+               "site": site, "mode": mode, "found": len(keys_after - keys_before), "rechecked": 0,
+               "checks": tally.checks, "tokens": tally.tokens, "cost_usd": round(tally.cost_usd, 4),
+               "limits_before": before, "limits_after": usage.limits(), "result": result}
     store.save_run(summary)
     return summary
 

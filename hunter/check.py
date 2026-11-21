@@ -6,6 +6,7 @@ the plain-English must-haves and the size limits.
 """
 
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -81,12 +82,24 @@ def claude_check(hunt: Hunt, listing: Listing, miles: float | None, tally: Tally
             )
         except (OSError, subprocess.TimeoutExpired) as error:
             return Verdict(UNKNOWN, f"Not checked: {error}")
-    if tally is not None:
-        try:
-            tally.add(json.loads(result.stdout))
-        except ValueError:
-            pass
+    try:
+        output = json.loads(result.stdout)
+    except ValueError:
+        output = None
+    if output is not None:
+        if tally is not None:
+            tally.add(output)
+        _append_usage(output)
     return parse_claude_answer(result.stdout)
+
+
+def _append_usage(output: dict) -> None:
+    """When run inside a browser check, report this check's tokens to it."""
+    usage_file = os.environ.get("HUNTER_USAGE_FILE")
+    if usage_file:
+        with open(usage_file, "a") as file:
+            file.write(json.dumps({"usage": output.get("usage"),
+                                   "total_cost_usd": output.get("total_cost_usd")}) + "\n")
 
 
 def parse_claude_answer(stdout: str) -> Verdict:

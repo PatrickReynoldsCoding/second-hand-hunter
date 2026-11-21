@@ -67,9 +67,22 @@ def test_geo_helpers():
 
 
 def test_tabs():
-    assert in_tab({"viewed_at": "x", "verdict": "fits"}, "viewed")
-    assert in_tab({"viewed_at": None, "verdict": "no"}, "rejected")
-    assert in_tab({"viewed_at": None, "verdict": "unknown"}, "new")
+    assert in_tab({"status": "viewed", "verdict": "fits"}, "viewed")
+    assert in_tab({"status": "interested", "verdict": "no"}, "interested")
+    assert in_tab({"status": "rejected", "verdict": "fits"}, "rejected")
+    assert in_tab({"status": None, "verdict": "no"}, "rejected")
+    assert in_tab({"status": None, "verdict": "unknown"}, "new")
+
+
+def test_status_survives_recheck(tmp_path):
+    from hunter.store import Store
+    store = Store(tmp_path / "x.db")
+    store.save("sofa", listing(), 1.0, "unknown", "No sizes")
+    store.set_status("sofa", "gumtree:1", "interested", "Contacted seller")
+    store.save("sofa", listing(), 1.0, "fits", "Seller replied")
+    [row] = store.listings("sofa")
+    assert (row["status"], row["stage"], row["verdict"]) == ("interested", "Contacted seller", "fits")
+    assert store.unviewed("sofa") == []
 
 
 def test_town_name_picks_nearest_match(tmp_path):

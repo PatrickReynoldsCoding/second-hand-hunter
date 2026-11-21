@@ -36,7 +36,7 @@ p{margin:0} .muted{color:var(--muted)} .reason{font-size:14px}
 button{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button.danger{color:var(--no)}
-button.view{margin-top:auto}
+div.actions{margin-top:auto}
 .buttons{display:flex;flex-wrap:wrap;gap:8px}
 .empty{color:var(--muted)}
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px}
@@ -44,3 +44,5 @@ button.view{margin-top:auto}
 main header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 main header h1{margin:0}
 ul.runs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px}
+section.stage{margin-bottom:24px}
+section.stage h2{margin-bottom:10px}

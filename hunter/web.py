@@ -15,11 +15,12 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 from hunter import net, run, spec
 from hunter.geo import Geo
 from hunter.spec import Home, Hunt, Profile, SpecError
-from hunter.store import DATA_DIR, store_for
+from hunter.store import DATA_DIR, STATUSES, store_for
 
 PORT = 8765
 STATIC = Path(__file__).resolve().parent / "static"
-TABS = {"new": "To review", "viewed": "Viewed", "rejected": "Rejected"}
+TABS = {"new": "To review", "interested": "Interested", "viewed": "Viewed", "rejected": "Rejected"}
+BROWSER_SITES = {"facebook": "Facebook", "preloved": "Preloved"}
 PHOTO_CACHE = DATA_DIR / "photos"
 PHOTO_HOSTS = ("img.gumtree.com", "i.ebayimg.com", "scontent", "fbcdn.net", "preloved")
 BADGES = {"fits": "✅ Fits", "unknown": "❓ Ask seller", "no": "❌ No"}
@@ -34,8 +35,8 @@ def serve(default_profile: str | None = None, port: int = PORT) -> None:
 
 
 def in_tab(listing: dict, tab: str) -> bool:
-    if listing["viewed_at"]:
-        return tab == "viewed"
+    if listing["status"]:
+        return tab == listing["status"]
     if listing["verdict"] == "no":
         return tab == "rejected"
     return tab == "new"
@@ -51,12 +52,30 @@ class SearchJob:
 
     def start(self, profile_name: str, hunt_slug: str | None, recheck: bool = False,
               mode: str | None = None) -> bool:
+        return self._launch("Searching…", self._run, profile_name, hunt_slug, recheck, mode)
+
+    def start_browser(self, profile_name: str, site: str, hunt_slug: str | None, mode: str | None) -> bool:
+        label = BROWSER_SITES.get(site, site)
+        return self._launch(f"Claude is checking {label} in your Chrome…", self._run_browser,
+                            profile_name, site, hunt_slug, mode or "basic")
+
+    def _launch(self, message: str, target, *args) -> bool:
         with self.lock:
             if self.running:
                 return False
-            self.running, self.message = True, "Searching…"
-        threading.Thread(target=self._run, args=(profile_name, hunt_slug, recheck, mode), daemon=True).start()
+            self.running, self.message = True, message
+        threading.Thread(target=target, args=args, daemon=True).start()
         return True
+
+    def _run_browser(self, profile_name: str, site: str, hunt_slug: str | None, mode: str) -> None:
+        try:
+            profile = spec.load_profile(profile_name)
+            summary = run.run_browser_site(profile, store_for(profile_name), site, hunt_slug, mode)
+            self.message = f"{BROWSER_SITES.get(site, site)}: {summary['found']} new. {usage_line(summary)}"
+        except Exception as error:
+            self.message = f"{site} check failed: {error}"
+        finally:
+            self.running = False
 
     def status(self) -> dict:
         return {"running": self.running, "message": self.message}
@@ -78,7 +97,8 @@ class SearchJob:
 
 
 def usage_line(summary: dict) -> str:
-    mode = f"{summary['mode']}: " if summary.get("mode") else ""
+    site = f"{BROWSER_SITES.get(summary['site'], summary['site'])} " if summary.get("site") else ""
+    mode = f"{site}{summary['mode']}: " if summary.get("mode") else ""
     tokens = f"{mode}{summary['tokens']:,} tokens ({summary['checks']} Claude checks)"
     before, after = summary.get("limits_before"), summary.get("limits_after")
     if not before or not after:
@@ -110,12 +130,32 @@ def render(profile_name: str | None, hunt_slug: str, tab: str, editing: str = ""
     )
     shown = sorted((item for item in listings if in_tab(item, tab)),
                    key=lambda item: (item["verdict"] != "fits", item["found_at"]))
-    cards = "".join(_card(profile.name, hunt.slug, item) for item in shown)
+    if tab == "interested":
+        body = _interested(profile, hunt.slug, shown)
+    else:
+        cards = "".join(_card(profile.name, hunt.slug, item, tab) for item in shown)
+        body = f'<div class="cards">{cards or "<p class=empty>Nothing here.</p>"}</div>'
+    browser_buttons = "".join(
+        f'<button type="button" data-browser="{site}" data-hunt="{html.escape(hunt.slug)}">'
+        f'Get Claude to check {label}</button>'
+        for site, label in BROWSER_SITES.items() if site in hunt.sites)
     header = (f'<header><h1>{html.escape(hunt.name)}</h1><div class="buttons">{_mode_picker()}'
               f'<button type="button" class="primary" data-search="{html.escape(hunt.slug)}">'
-              f'Search this hunt</button></div></header>')
-    return _page(sidebar, f'{header}<nav class="tabs">{tab_links}</nav>'
-                          f'<div class="cards">{cards or "<p class=empty>Nothing here.</p>"}</div>')
+              f'Search this hunt</button>{browser_buttons}</div></header>')
+    return _page(sidebar, f'{header}<nav class="tabs">{tab_links}</nav>{body}')
+
+
+def _interested(profile: Profile, hunt: str, items: list[dict]) -> str:
+    """Interested listings grouped by stage (e.g. "Contacted seller")."""
+    stages = list(profile.stages)
+    stages += [item["stage"] for item in items if item["stage"] and item["stage"] not in stages]
+    sections = []
+    for stage in stages:
+        in_stage = [item for item in items if (item["stage"] or stages[0]) == stage]
+        cards = "".join(_card(profile.name, hunt, item, "interested", stages) for item in in_stage)
+        sections.append(f'<section class="stage"><h2>{html.escape(stage)} ({len(in_stage)})</h2>'
+                        f'<div class="cards">{cards or "<p class=empty>None.</p>"}</div></section>')
+    return "".join(sections)
 
 
 def _link(profile: str, hunt: str = "", tab: str = "", edit: str = "") -> str:
@@ -147,6 +187,9 @@ def _sidebar(profile: Profile | None, hunt: Hunt | None, profiles: list[str], ed
         parts.append(_home_form(profile))
         parts.append(f"""<section><h2>Searches</h2>
   {_mode_picker()}<button type="button" data-search="">Search all hunts</button>
+  {"".join(f'<button type="button" data-browser="{site}" data-hunt="">Get Claude to check {label} (all hunts)</button>'
+           for site, label in BROWSER_SITES.items()
+           if any(site in h.sites for h in profile.hunts))}
   <p id="status" class="muted"></p>{_recent_runs(profile.name)}</section>""")
     return "".join(parts)
 
@@ -163,7 +206,9 @@ def _recent_runs(profile: str) -> str:
         return ""
     rows = "".join(
         f'<li><b>{run_info["finished_at"][5:16].replace("T", " ")}</b> · {html.escape(", ".join(run_info["hunts"]))} · '
-        f'{run_info["found"]} new<br><span class="muted">{html.escape(usage_line(run_info))}</span></li>'
+        f'{run_info["found"]} new<br><span class="muted">{html.escape(usage_line(run_info))}</span>'
+        + (f'<details><summary>Claude\'s report</summary><p>{html.escape(run_info["result"])}</p></details>'
+           if run_info.get("result") else "") + '</li>'
         for run_info in runs)
     return f'<ul class="runs">{rows}</ul>'
 
@@ -173,10 +218,11 @@ def _home_form(profile: Profile) -> str:
     fields = [("postcode", "Postcode", home.postcode), ("gumtree_area", "Gumtree area", home.gumtree_area),
               ("facebook_area", "Facebook area", home.facebook_area),
               ("lat", "Latitude (optional)", home.lat), ("lon", "Longitude (optional)", home.lon)]
-    return f"""<details><summary>Home: {html.escape(home.postcode)}</summary>
+    return f"""<details><summary>Profile: {html.escape(home.postcode)}, stages</summary>
 <form class="api" data-api="/api/home" data-profile="{html.escape(profile.name)}">
   {"".join(_input(name, label, value) for name, label, value in fields)}
-  <button>Save home</button>
+  {_textarea("stages", "Interested stages (one per line)", chr(10).join(profile.stages))}
+  <button>Save</button>
 </form></details>"""
 
 
@@ -230,7 +276,15 @@ def _textarea(name: str, label: str, value: str) -> str:
     return f'<label>{label}<textarea name="{name}" rows="{rows}">{html.escape(value)}</textarea></label>'
 
 
-def _card(profile: str, hunt: str, item: dict) -> str:
+ACTIONS = {
+    "new": [("interested", "Interested"), ("viewed", "Viewed"), ("rejected", "Reject")],
+    "viewed": [("interested", "Interested"), ("rejected", "Reject"), ("", "Back to review")],
+    "rejected": [("interested", "Interested"), ("", "Back to review")],
+    "interested": [("rejected", "Reject"), ("", "Back to review")],
+}
+
+
+def _card(profile: str, hunt: str, item: dict, tab: str, stages: list[str] | None = None) -> str:
     esc = html.escape
     photo = item["image_urls"][0] if item["image_urls"] else ""
     image = (f'<img src="/photo?u={quote(photo, safe="")}" alt="" loading="lazy">' if photo
@@ -241,7 +295,16 @@ def _card(profile: str, hunt: str, item: dict) -> str:
     if item["seller_question"]:
         question = (f'<p class="ask">{esc(item["seller_question"])}</p>'
                     f'<button class="copy" data-text="{esc(item["seller_question"])}">Copy question</button>')
-    viewed = bool(item["viewed_at"])
+    ids = f'data-profile="{esc(profile)}" data-hunt="{esc(hunt)}" data-key="{esc(item["key"])}"'
+    stage_pick = ""
+    if stages:
+        current = item["stage"] or stages[0]
+        options = "".join(f'<option {"selected" if stage == current else ""}>{esc(stage)}</option>'
+                          for stage in stages)
+        stage_pick = f'<label>Stage<select class="stage-pick" {ids}>{options}</select></label>'
+    buttons = "".join(
+        f'<button type="button" class="status {"primary" if status == "interested" else ""}" {ids} '
+        f'data-status="{status}">{label}</button>' for status, label in ACTIONS.get(tab, ACTIONS["new"]))
     return f"""<article class="{esc(item['verdict'])}">
   <a href="{esc(item['url'])}" target="_blank" rel="noopener">{image}</a>
   <div class="body">
@@ -249,9 +312,8 @@ def _card(profile: str, hunt: str, item: dict) -> str:
     <h3><a href="{esc(item['url'])}" target="_blank" rel="noopener">{esc(item['title'])}</a></h3>
     <p class="muted"><b>{price}</b> · {miles} · {esc(item['place'] or '')}</p>
     <p class="reason">{esc(item['reason'] or '')}</p>
-    {question}
-    <button class="view primary" data-profile="{esc(profile)}" data-hunt="{esc(hunt)}" data-key="{esc(item['key'])}"
-      data-viewed="{int(not viewed)}">{"Not viewed" if viewed else "Mark viewed"}</button>
+    {question}{stage_pick}
+    <div class="buttons actions">{buttons}</div>
   </div>
 </article>"""
 
@@ -270,7 +332,7 @@ def save_home(data: dict) -> None:
                 lat=_number(data.get("lat")), lon=_number(data.get("lon")),
                 gumtree_area=data.get("gumtree_area", "").strip() or None,
                 facebook_area=data.get("facebook_area", "").strip() or None)
-    spec.save_home(_profile_name(data), home)
+    spec.save_home(_profile_name(data), home, stages=_lines(data.get("stages", "")) or None)
 
 
 def save_hunt(data: dict) -> Hunt:
@@ -347,9 +409,19 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(error)})
 
     def _post(self, path: str, data: dict) -> dict:
-        if path == "/viewed":
-            store_for(_profile_name(data)).set_viewed(data["hunt"], data["key"], bool(data["viewed"]))
+        if path == "/api/status":
+            status = data.get("status") or None
+            if status is not None and status not in STATUSES:
+                raise SpecError("Unknown status.")
+            store_for(_profile_name(data)).set_status(data["hunt"], data["key"], status, data.get("stage"))
             return {}
+        if path == "/api/browser":
+            if data.get("site") not in BROWSER_SITES:
+                raise SpecError("Unknown site.")
+            started = JOB.start_browser(_profile_name(data), data["site"], data.get("hunt") or None, _mode(data))
+            label = BROWSER_SITES[data["site"]]
+            return {"message": f"Claude is checking {label}. Keep Chrome open." if started
+                    else "Something is already running."}
         if path == "/api/home":
             save_home(data)
             return {"message": "Saved."}

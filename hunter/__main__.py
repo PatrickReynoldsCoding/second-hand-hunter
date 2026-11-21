@@ -33,6 +33,7 @@ def main() -> None:
     add.add_argument("--place")
     add.add_argument("--description", default="")
     add.add_argument("--photo", action="append", default=[], help="photo URL, can repeat")
+    add.add_argument("--mode", choices=["basic", "thorough"], help="check mode (default: the hunt's)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -61,7 +62,7 @@ def main() -> None:
             print("already have: skipped")
             return
         verdict = run.add_listing(profile, hunt, listing, store, Geo(DATA_DIR / "geo-cache.json"),
-                                  fetch_details=False)
+                                  fetch_details=False, mode=args.mode)
         print(f"{verdict.verdict}: {verdict.reason}")
 
 

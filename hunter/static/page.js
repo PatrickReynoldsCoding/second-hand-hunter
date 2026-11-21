@@ -7,7 +7,17 @@ function setMode(value) {
   try { localStorage.setItem('checkMode', value); } catch {}
 }
 try { setMode(localStorage.getItem('checkMode') || 'basic'); } catch { setMode('basic'); }
-document.addEventListener('change', e => { if (e.target.classList.contains('mode-pick')) setMode(e.target.value); });
+document.addEventListener('change', async e => {
+  const pick = e.target;
+  if (pick.classList.contains('mode-pick')) setMode(pick.value);
+  if (pick.classList.contains('stage-pick')) {
+    try {
+      await post('/api/status', {profile: pick.dataset.profile, hunt: pick.dataset.hunt, key: pick.dataset.key,
+        status: 'interested', stage: pick.value});
+      location.reload();
+    } catch (error) { toast(error.message); }
+  }
+});
 
 async function post(path, body) {
   const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -53,9 +63,13 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
   try {
     if (b.classList.contains('copy')) { await navigator.clipboard.writeText(b.dataset.text); b.textContent = 'Copied'; }
-    else if (b.classList.contains('view')) {
-      await post('/viewed', {profile: b.dataset.profile, hunt: b.dataset.hunt, key: b.dataset.key, viewed: b.dataset.viewed === '1'});
+    else if (b.dataset.status !== undefined) {
+      await post('/api/status', {profile: b.dataset.profile, hunt: b.dataset.hunt, key: b.dataset.key, status: b.dataset.status});
       b.closest('article').remove();
+      toast(b.textContent === 'Back to review' ? 'Moved back to review' : `Moved to ${b.textContent}`);
+    }
+    else if (b.dataset.browser) {
+      toast((await post('/api/browser', {profile: profile(), site: b.dataset.browser, hunt: b.dataset.hunt, mode: mode()})).message); watch();
     }
     else if (b.dataset.toggle) document.getElementById(b.dataset.toggle).classList.toggle('hidden');
     else if (b.dataset.delete) {
