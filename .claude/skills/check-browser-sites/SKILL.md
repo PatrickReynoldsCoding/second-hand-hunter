@@ -6,7 +6,8 @@ description: Check Facebook Marketplace and Preloved for second-hand-hunter, in 
 # Check Facebook / Preloved in the user's browser
 
 These sites are only checked on request, in the user's own logged-in Chrome,
-at a human pace. Never schedule this or run it unattended.
+at a human pace. Never schedule this: run it only when the user asks (in chat or with a
+button on the review page).
 
 1. Load the Claude in Chrome tools (with ToolSearch if they are deferred). If they aren't available, tell
    the user in one line to run `/chrome` (or start Claude Code with `--chrome`) and stop.
