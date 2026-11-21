@@ -1,0 +1,7 @@
+# Personal info: your location and your hunts. Never commit these.
+profiles/
+# Listings found, viewed marks, cached photos.
+data/
+__pycache__/
+*.pyc
+.venv/

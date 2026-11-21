@@ -1,0 +1,27 @@
+# One file per item you are hunting for.
+name = "Corner sofa"
+active = true
+
+# Words used to search each site. One search per line.
+searches = ["corner sofa", "l shaped sofa", "chaise sofa"]
+
+max_price = 100        # pounds
+max_distance = 10      # miles from home
+sites = ["ebay", "gumtree", "preloved"]
+
+# Hard limits that can be checked from numbers in the listing.
+# Units: cm. Each one is optional.
+[size]
+width_max = 200        # the back of the sofa
+chaise_max = 200       # the long side
+
+# Must-haves in plain English. Checked against the listing text and photos.
+# A listing that doesn't say gets "unknown", with a question for the seller.
+[[must]]
+rule = "Long part (chaise) is on the RIGHT when you are sitting on it. Sellers call this 'left-hand facing'."
+
+[[must]]
+rule = "Back of the sofa is no more than 2 m wide."
+
+[[must]]
+rule = "Long side is no more than 2 m long."
